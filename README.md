@@ -212,7 +212,7 @@ arm A with its bare names (`ur_arm_controller`, `ur_manipulator`,
 The **table is a link of the robot description**, not only a Gazebo model,
 so MoveIt refuses to plan into it on the real robot too, from the first
 moment and without anything having to publish it. Checked: a goal that puts
-the wrist in the table fails with "contact between 'workcell_table' and
+the wrist in the table fails with "contact between 'bartender_table' and
 'wrist_1_link'".
 
 ```bash

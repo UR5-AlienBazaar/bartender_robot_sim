@@ -1,0 +1,393 @@
+#!/usr/bin/env python3
+"""Generate the bartender scene world and the debug bottle models.
+
+WHY A GENERATOR
+---------------
+The scene has to be describable from one place. The VLA environment
+(episodes, resets, ground truth, later randomization) needs the object
+poses and camera placements as data, not as numbers buried in an SDF
+nobody re-reads. config/bartender_scene.yaml is that one place; this
+script renders it into the two things Gazebo actually loads:
+
+  worlds/workcell_world.sdf          -- the whole world, cameras included
+  models/debug_bottle_{red,green,blue}/  -- the three debug bottles
+
+Both outputs are committed (house style: edit the script and re-run it,
+never the output) and test_bartender_scene.py re-runs this and fails on
+any difference, so the generated files can never quietly drift from the
+YAML that everything else reads.
+
+Run it with no arguments from anywhere; it finds the repo by its own
+location. It rewrites the files in place.
+
+THE DEBUG BOTTLES
+-----------------
+Three visually distinct primitive-built bottles (a body cylinder plus a
+narrower neck cylinder) for the phases where the policy must tell WHICH
+bottle it is looking at, before realistic labels exist. The colours are
+debug aids only -- nothing downstream may decide semantics from them.
+Physics is deliberately simple: a solid-cylinder inertia proxy for the
+body (the neck's contribution is negligible at this fidelity), glass-like
+friction, mass in the 0.45-0.85 kg band of the real 35 cl spirits the bar
+models use. Collision is the same two cylinders as the visuals; a mesh
+would gain nothing here and cost the bullet narrowphase.
+"""
+import argparse
+import os
+import sys
+
+import yaml
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+PACKAGE = os.path.normpath(os.path.join(HERE, os.pardir))
+REPO = os.path.normpath(os.path.join(PACKAGE, *([os.pardir] * 3)))
+MODELS = os.path.join(REPO, 'models')
+CONFIG = os.path.join(PACKAGE, 'config', 'bartender_scene.yaml')
+
+# The three debug bottles. `color` is the debug material; the three profiles
+# differ in mass AND silhouette so the side camera can tell them apart by
+# shape as well as colour. Heights total 0.25-0.30 m, matching the real
+# bottles this bar pours (whiskey 0.27, cola 0.25), so no camera framing
+# assumes anything shorter.
+DEBUG_BOTTLES = {
+    'debug_bottle_red': dict(
+        body_radius=0.035, body_height=0.20,
+        neck_radius=0.013, neck_height=0.09, mass=0.45,
+        color=(0.75, 0.12, 0.12),
+        note='tall slim debug bottle'),
+    'debug_bottle_green': dict(
+        body_radius=0.040, body_height=0.22,
+        neck_radius=0.015, neck_height=0.08, mass=0.60,
+        color=(0.10, 0.65, 0.20),
+        note='standard debug bottle'),
+    'debug_bottle_blue': dict(
+        body_radius=0.048, body_height=0.18,
+        neck_radius=0.016, neck_height=0.07, mass=0.85,
+        color=(0.10, 0.30, 0.85),
+        note='stout debug bottle'),
+}
+
+
+def fmt(values):
+    """SDF pose/component formatting: plain decimals, no exponent forms."""
+    return ' '.join(f'{float(v):.6g}' for v in values)
+
+
+def load_scene():
+    with open(CONFIG) as f:
+        return yaml.safe_load(f)
+
+
+def camera_model(name, cam):
+    """One static world camera model, from the scene config."""
+    res_w, res_h = cam['resolution']
+    return f'''    <model name="{name}_camera">
+      <static>true</static>
+      <pose>{fmt(cam['pose'])}</pose>
+      <link name="link">
+        <sensor name="{name}_rgb" type="camera">
+          <always_on>true</always_on>
+          <update_rate>{cam['fps']}</update_rate>
+          <topic>/camera/{name}/image_raw</topic>
+          <camera>
+            <horizontal_fov>{cam['horizontal_fov']:.6g}</horizontal_fov>
+            <image>
+              <width>{res_w}</width>
+              <height>{res_h}</height>
+              <format>R8G8B8</format>
+            </image>
+            <clip>
+              <near>{cam['near']:.6g}</near>
+              <far>{cam['far']:.6g}</far>
+            </clip>
+          </camera>
+        </sensor>
+      </link>
+    </model>
+'''
+
+
+def object_include(entity, spec):
+    """One <include>, named for the entity contract (bottle_1, glass, ...)."""
+    return (f'    <include>\n'
+            f'      <uri>model://{spec["model"]}</uri>\n'
+            f'      <name>{entity}</name>\n'
+            f'      <pose>{fmt(spec["pose"])}</pose>\n'
+            f'    </include>\n')
+
+
+def world_sdf(scene):
+    """The complete workcell world, rendered from the scene config.
+
+    Physics, plugins, sun and ground are the previous hand-written
+    workcell world's, unchanged -- including shadows off, because this
+    world renders three cameras on CPU (llvmpipe) on the dev box and
+    shadows cost most of that budget.
+    """
+    overhead = scene['cameras']['overhead']
+    side = scene['cameras']['side']
+    parts = []
+    parts.append(f'''<?xml version="1.0" ?>
+<!-- GENERATED by bartender_gazebo/scripts/make_bartender_scene.py from
+     config/bartender_scene.yaml. Do not edit: change the YAML and re-run
+     the script. test_bartender_scene.py fails if this file drifts.
+
+     The one-armed workcell as the VLA data-collection scene: one UR5e on
+     its 1.40 x 0.70 table (the table is a link of the robot description,
+     not of this world; see workcell.urdf.xacro for why), five bottles,
+     a glass, and the two static cameras. The wrist camera is on the robot.
+     Entity names (bottle_1..bottle_5, glass) are the environment's
+     naming contract; poses are the reset poses. -->
+<sdf version="1.9">
+  <world name="{scene['world_name']}">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <!-- Bullet rather than DART's default FCL narrowphase. This is the
+           single biggest lever on how long a pour takes, and it costs nothing
+           in fidelity.
+
+           Every link of the arm and gripper has a triangle-mesh collision.
+           Under FCL, the moment the gripper takes the bottle's weight the
+           real-time factor collapses from 1.0 to ~0.1, so trajectories that
+           are timed at 0.6-1.7s take 5-12s of wall clock. It is specifically
+           the loaded mesh contact: clamping on the bottle while it still rests
+           on the counter stays at RTF 1.0, and it recovers the instant the
+           bottle is released.
+
+           Measured over 4 pours each, same code, only this setting changed:
+             FCL     87.4 / 86.1 / 79.9 / 79.8 s
+             bullet  24.6 / 24.2 / 24.3 s
+           Both 4/4 with the bottle returned upright and within 8mm of its
+           station, so this buys ~3.4x for free.
+
+           Two things that did NOT work, for whoever tries next: halving the
+           step count (max_step_size 0.001 -> 0.002) changed the ratio not at
+           all, and raising the joint acceleration limits made the planned
+           trajectories shorter but the execution no faster - faster motion
+           just makes the contact solve harder by the same factor, and it
+           starts throwing the bottle. -->
+      <dart>
+        <collision_detector>bullet</collision_detector>
+      </dart>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-contact-system" name="gz::sim::systems::Contact"/>
+
+    <light type="directional" name="sun">
+      <!-- cast_shadows off: this world renders three camera sensors on CPU
+           (llvmpipe) on the dev box, and shadows cost most of that budget.
+           The bar keeps shadows; the workcell needs the frame rate. -->
+      <cast_shadows>false</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.3 0.3 0.3 1</ambient>
+            <diffuse>0.4 0.4 0.4 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+''')
+    parts.append('    <!-- The two static cameras of the three-camera rig. '
+                 'Poses, rates and\n         FOVs are decided in '
+                 'config/bartender_scene.yaml; the launch\n         '
+                 'publishes their static TF from the same file. -->\n')
+    parts.append(camera_model('overhead', overhead))
+    parts.append(camera_model('side', side))
+    parts.append('''
+    <!-- The manipulable scene, named for the entity contract: these exact
+         names are what episodes reset, rewards read and randomization
+         perturbs. Poses are the deterministic start/reset poses. -->
+''')
+    for entity, spec in scene['objects'].items():
+        parts.append(object_include(entity, spec))
+    parts.append('''  </world>
+</sdf>
+''')
+    return ''.join(parts)
+
+
+def debug_bottle_sdf(name, p):
+    """One debug bottle model, from its profile."""
+    r, h = p['body_radius'], p['body_height']
+    nr, nh = p['neck_radius'], p['neck_height']
+    # Solid-cylinder proxy for the body about its centre. The neck is a
+    # few percent of the mass and is ignored, deliberately -- this is a
+    # debug prop, not a physics study.
+    ixx = p['mass'] * (3 * r * r + h * h) / 12.0
+    izz = p['mass'] * r * r / 2.0
+    cr, cg, cb = p['color']
+    body_mid, neck_mid = h / 2.0, h + nh / 2.0
+    return f'''<?xml version="1.0" ?>
+<!-- GENERATED by bartender_gazebo/scripts/make_bartender_scene.py; {p['note']}.
+     Edit the generator, not this file. Colors are debug aids only. -->
+<sdf version="1.9">
+  <model name="{name}">
+    <!-- Link origin is the centre of the bottle's base, like the whiskey
+         and cola models, so a standing pose is always z = table top. -->
+    <link name="body">
+      <inertial>
+        <pose>0 0 {body_mid:.6g} 0 0 0</pose>
+        <mass>{p['mass']:.6g}</mass>
+        <inertia>
+          <ixx>{ixx:.6e}</ixx>
+          <iyy>{ixx:.6e}</iyy>
+          <izz>{izz:.6e}</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="body_collision">
+        <pose>0 0 {body_mid:.6g} 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>{r}</radius>
+            <length>{h}</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.9</mu>
+              <mu2>0.9</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name="body_visual">
+        <pose>0 0 {body_mid:.6g} 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>{r}</radius>
+            <length>{h}</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>{cr} {cg} {cb} 1</ambient>
+          <diffuse>{cr} {cg} {cb} 1</diffuse>
+          <specular>0.2 0.2 0.2 0.3</specular>
+        </material>
+      </visual>
+      <collision name="neck_collision">
+        <pose>0 0 {neck_mid:.6g} 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>{nr}</radius>
+            <length>{nh}</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.9</mu>
+              <mu2>0.9</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name="neck_visual">
+        <pose>0 0 {neck_mid:.6g} 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>{nr}</radius>
+            <length>{nh}</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.15 0.15 0.15 1</ambient>
+          <diffuse>0.15 0.15 0.15 1</diffuse>
+          <specular>0.3 0.3 0.3 0.3</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>
+'''
+
+
+def model_config(name, p):
+    return f'''<?xml version="1.0"?>
+<!-- GENERATED by bartender_gazebo/scripts/make_bartender_scene.py. -->
+<model>
+  <name>{name}</name>
+  <version>1.0</version>
+  <sdf version="1.9">model.sdf</sdf>
+  <author>bartender_robot_sim</author>
+  <description>{p['note']} (debug colour {name.split('_')[-1]}); generated,
+do not edit.</description>
+</model>
+'''
+
+
+def write_all():
+    scene = load_scene()
+    world_path = os.path.join(PACKAGE, 'worlds', 'workcell_world.sdf')
+    with open(world_path, 'w') as f:
+        f.write(world_sdf(scene))
+    for name, p in DEBUG_BOTTLES.items():
+        d = os.path.join(MODELS, name)
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, 'model.sdf'), 'w') as f:
+            f.write(debug_bottle_sdf(name, p))
+        with open(os.path.join(d, 'model.config'), 'w') as f:
+            f.write(model_config(name, p))
+    return world_path
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    parser.add_argument('--check', action='store_true',
+                        help='Do not write; exit 1 if files would change.')
+    args = parser.parse_args()
+    if not args.check:
+        path = write_all()
+        print(f'wrote {path}')
+        for name in DEBUG_BOTTLES:
+            print(f"wrote {os.path.join(MODELS, name, 'model.sdf')}")
+        return
+    # --check: compare against what is on disk, using the test's own
+    # comparison so the two can never disagree about what "same" means.
+    import test_bartender_scene as t
+    ok = t.generated_matches_disk()
+    sys.exit(0 if ok else 1)
+
+
+if __name__ == '__main__':
+    main()

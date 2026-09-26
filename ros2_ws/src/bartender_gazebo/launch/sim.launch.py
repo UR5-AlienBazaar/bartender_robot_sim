@@ -193,9 +193,78 @@ def generate_launch_description():
             '@sensor_msgs/msg/Image[ignition.msgs.Image',
             '/bartender/overhead_camera/image_raw'
             '@sensor_msgs/msg/Image[ignition.msgs.Image',
+            # The VLA environment's three-camera rig, bridged on the workcell
+            # (and no-ops on the bar, where these gz topics do not exist):
+            # each camera publishes image_raw and camera_info.
+            '/camera/overhead/image_raw'
+            '@sensor_msgs/msg/Image[ignition.msgs.Image',
+            '/camera/overhead/camera_info'
+            '@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo',
+            '/camera/side/image_raw'
+            '@sensor_msgs/msg/Image[ignition.msgs.Image',
+            '/camera/side/camera_info'
+            '@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo',
+            '/camera/wrist/image_raw'
+            '@sensor_msgs/msg/Image[ignition.msgs.Image',
+            '/camera/wrist/camera_info'
+            '@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo',
         ],
         output='screen',
     )
+
+    # The rest of this block is the VLA scene on the workcell world only:
+    # the bar keeps its own dynamic_pose bridge and has no world cameras to
+    # publish TF for.
+    is_workcell = PythonExpression(
+        ["'", LaunchConfiguration('world'), "' == 'workcell_world.sdf'"])
+    workcell_only = IfCondition(is_workcell)
+
+    # Ground-truth object poses for the workcell, same shape as the bar's:
+    # SceneBroadcaster's running report of where every non-static model
+    # actually is, under its own topic name rather than on /tf (see the
+    # beer_bridge comment above for why). scripts/scene_state.py and
+    # scripts/reset_bartender_scene.py read entity poses from it.
+    workcell_pose_bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=[
+            '/world/workcell_world/dynamic_pose/info'
+            '@tf2_msgs/msg/TFMessage[ignition.msgs.Pose_V',
+        ],
+        output='screen',
+        condition=workcell_only,
+    )
+
+    # Static TF for the two world cameras. The poses come from the same
+    # bartender_scene.yaml the world SDF is generated from, so the TF tree
+    # and the sensors cannot disagree; each camera gets its body link and
+    # its optical frame (ROS convention: +z forward), the wrist camera's
+    # frames come from the robot description instead and move with it.
+    import yaml as _yaml  # noqa: PLC0415 - launch files are single-use scripts
+    with open(os.path.join(pkg_gazebo, 'config', 'bartender_scene.yaml')) as f:
+        scene = _yaml.safe_load(f)
+    camera_tf_nodes = []
+    for name in ('overhead', 'side'):
+        pose = scene['cameras'][name]['pose']
+        camera_tf_nodes.append(Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            arguments=['--x', str(pose[0]), '--y', str(pose[1]),
+                       '--z', str(pose[2]), '--roll', str(pose[3]),
+                       '--pitch', str(pose[4]), '--yaw', str(pose[5]),
+                       '--frame-id', 'world',
+                       '--child-frame-id', f'{name}_camera_link'],
+            condition=workcell_only,
+        ))
+        camera_tf_nodes.append(Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            arguments=['--x', '0', '--y', '0', '--z', '0',
+                       '--roll', '-1.5708', '--pitch', '0', '--yaw', '-1.5708',
+                       '--frame-id', f'{name}_camera_link',
+                       '--child-frame-id', f'{name}_camera_optical_frame'],
+            condition=workcell_only,
+        ))
 
     return LaunchDescription(scene_args + [
         headless_arg,
@@ -208,4 +277,6 @@ def generate_launch_description():
         clock_bridge,
         beer_bridge,
         camera_bridge,
+        workcell_pose_bridge,
+        *camera_tf_nodes,
     ])

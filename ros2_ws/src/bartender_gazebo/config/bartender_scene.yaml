@@ -1,0 +1,119 @@
+# The bartender scene: everything that decides where things stand and where
+# the cameras look, for the one-armed workcell (the VLA data-collection
+# environment).
+#
+# THIS FILE IS THE SOURCE OF TRUTH. `bartender_gazebo/scripts/
+# make_bartender_scene.py` reads it and writes worlds/workcell_world.sdf and
+# the debug bottle models under repo-root models/; both of those are
+# generated and committed, and test_bartender_scene.py fails if either
+# drifts from this file. The launch reads the camera poses from here to
+# publish the static camera transforms, so the SDF and the TF tree cannot
+# disagree either. Change things HERE, never in the generated files.
+#
+# All poses are in the world frame, which is the table's corner at its top
+# surface (see bartender_description/urdf/workcell.urdf.xacro). The table is
+# 1.40 (x) by 0.70 (y), top at z = 0.75, and the arm's base is at
+# (0.35, 0.35) on the table's centreline.
+world_name: workcell_world
+world_frame: world
+
+# Entity names are a contract with the later VLA environment (episodes,
+# resets, ground-truth rewards). They must not be renamed casually.
+objects:
+  bottle_1:
+    model: jack_daniels_bottle
+    pose: [0.52, 0.55, 0.75, 0, 0, 0]
+  bottle_2:
+    model: cola_bottle
+    pose: [0.68, 0.55, 0.75, 0, 0, 0]
+  bottle_3:
+    model: debug_bottle_red
+    pose: [0.84, 0.55, 0.75, 0, 0, 0]
+  bottle_4:
+    model: debug_bottle_green
+    pose: [1.00, 0.55, 0.75, 0, 0, 0]
+  bottle_5:
+    model: debug_bottle_blue
+    pose: [1.16, 0.55, 0.75, 0, 0, 0]
+  glass:
+    model: serving_glass
+    pose: [0.84, 0.30, 0.75, 0, 0, 0]
+
+# The bottle row runs along x at y = 0.55 (the far side of the table from
+# the arm) at 0.16 m pitch, inside the arm's measured reachable band
+# (x 0.5-1.2, y 0.1-0.6). The glass sits 0.25 clear of bottle_3 -- the same
+# clearance the bar world gives its glass.
+#
+# The arm's episode start is the SRDF's own `home` group_state
+# (bartender_moveit_config/srdf/workcell.srdf): the tool ends up over the
+# table's centreline about 0.33 m above the top, a compact bent pose --
+# nothing like the spawn pose (all joints zero), from which the arm
+# extends off the table's near edge toward the floor. The spawn is what it
+# is (the URDF's default joints); the FIRST reset after startup moves the
+# arm from spawn to home, and every later reset restores home, so all
+# episodes start identically. Kept in sync with the SRDF by
+# test_bartender_scene.py.
+arm_home: [0.0, -1.57, 0.0, -1.57, 0.0, 0.0]
+
+# Glass geometry the later pour reward will reason about. Must match
+# models/serving_glass/model.sdf (guarded by test_bartender_scene.py).
+glass:
+  radius: 0.04
+  height: 0.09
+
+# The three RGB cameras. Overhead and side are static world models whose
+# transforms the launch publishes as static TF (world -> *_camera_link ->
+# *_camera_optical_frame). The wrist camera is part of the robot
+# description (tool0 -> wrist_camera_link -> wrist_camera_optical_frame) and
+# moves with the arm. All three bridge to ROS as
+# /camera/<name>/image_raw + /camera/<name>/camera_info.
+#
+# Poses are x y z roll pitch yaw. A camera body looks along its own +x;
+# the optical frames follow the ROS convention (+z forward) via a fixed
+# rpy(-pi/2, 0, -pi/2) rotation, published as the *_optical_frame child.
+cameras:
+  overhead:
+    # 1.10 m above the table, pitched 90 deg straight down, yawed so image
+    # up is +y: the bottle row (y=0.55) runs along the top of the frame and
+    # the glass sits mid-frame. 72 deg FOV covers ~1.6 m, the whole work
+    # area. Do not raise it without re-checking the bottles' pixel size.
+    pose: [0.84, 0.42, 1.85, 0.0, 1.5708, 1.5708]
+    resolution: [640, 480]
+    # 30 Hz is the target for data collection on GPU hardware. This dev
+    # box renders on CPU (llvmpipe, no /dev/dri) and three 640x480 streams
+    # at 30 Hz hold the whole sim at RTF ~0.2; 10 Hz keeps it workable.
+    # One knob, here, for all three cameras.
+    fps: 10
+    horizontal_fov: 1.2566
+    near: 0.2
+    far: 3.0
+  side:
+    # Diagonal from the near side, aimed at the bottle row and the glass:
+    # this is the view that shows bottle elevation, tilt and pour height,
+    # which the overhead view cannot. Off to one side (x=0.55) so the arm's
+    # base does not occlude the work area, and high enough (1.30) to see
+    # over the bottles to the glass.
+    pose: [0.55, -0.35, 1.30, 0.0, 0.4538, 1.2311]
+    resolution: [640, 480]
+    fps: 10
+    horizontal_fov: 1.2
+    near: 0.2
+    far: 5.0
+  wrist:
+    # 8 cm off the tool axis (the gripper occupies the axis itself) and
+    # 10 cm beyond the flange, looking outward along the gripper approach
+    # so the grasp region is in frame. Set in workcell.urdf.xacro, mirrored
+    # here for the record and guarded by test_bartender_scene.py.
+    parent_link: tool0
+    relative_pose: [0.08, 0.0, 0.10, 0.0, -1.5708, 0.0]
+    resolution: [640, 480]
+    fps: 10
+    horizontal_fov: 1.047
+    near: 0.03
+    far: 5.0
+
+# Domain randomization is deliberately disabled: the first scene must be
+# deterministic so every episode starts identically. The structure below is
+# what a later phase will fill in; the reset script ignores it until then.
+randomization:
+  enabled: false

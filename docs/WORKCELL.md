@@ -482,7 +482,7 @@ ros2 service call /dashboard_client/stop         std_srvs/srv/Trigger
 | Gazebo twin does not move | `ros2 topic hz /joint_states` for the real side. `twin_mirror` logs a warning when it stops hearing the robot. |
 | Program plays on the pendant but "Ready to receive control commands" never appears | URCap Host IP is not this PC's address (step 3), or the firewall (step 4). |
 | `jog x`: "only 0.00 of the path was reachable" | The arm is straight up. Joint-jog it into a bend first. |
-| Move refused, log mentions `workcell_table` | The move would hit the table. If the table is clearly not in the way, `arm_yaw` or `table_height` is wrong. |
+| Move refused, log mentions `bartender_table` | The move would hit the table. If the table is clearly not in the way, `arm_yaw` or `table_height` is wrong. |
 | MoveIt says success but the arm does not move | The speed slider is at 0%, or the program is paused on the pendant. |
 | Gripper "closes" but nothing happens | Expected: it is simulated until `gripper_fake_hardware:=false`. |
 | `package 'ur_robot_driver' not found` | Step 1. |

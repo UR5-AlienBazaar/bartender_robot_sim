@@ -111,8 +111,15 @@
   <link name="world"/>
 
   <!-- The table, from the floor to the top surface. Its origin is the
-       corner at world, so the box is offset by half of each side. -->
-  <link name="workcell_table">
+       corner at world, so the box is offset by half of each side.
+
+       Named bartender_table (it was workcell_table before the VLA
+       environment): it is one of the
+       environment's entity-name contracts - the VLA scene names its
+       queryable entities bartender_table, bottle_1..5, glass - and the
+       table being a LINK of this description rather than a world model is
+       what makes MoveIt refuse to plan into it on the real robot. -->
+  <link name="bartender_table">
     <visual>
       <origin xyz="${table_length / 2} ${table_width / 2} ${-table_height / 2}" rpy="0 0 0"/>
       <geometry>
@@ -138,11 +145,11 @@
   </link>
   <joint name="world_to_table" type="fixed">
     <parent link="world"/>
-    <child link="workcell_table"/>
+    <child link="bartender_table"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
-  <gazebo reference="workcell_table">
+  <gazebo reference="bartender_table">
     <mu1>0.8</mu1>
     <mu2>0.8</mu2>
   </gazebo>
@@ -192,18 +199,50 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </xacro:robotiq_gripper>
 
-  <!-- Same wrist camera as arm A on the bar. Only Gazebo reads it. -->
-  <gazebo reference="tool0">
-    <sensor name="arm_a_wrist_camera" type="camera">
-      <pose>0.08 0 0.10 0 -1.5708 0</pose>
+  <!-- The wrist camera: one of the three RGB streams of the VLA
+       environment (/camera/wrist/image_raw, 640x480).
+
+       It is a real pair of links and not only a <gazebo> tag so that
+       robot_state_publisher puts it in the TF tree and the frame contract
+       holds like for the static cameras:
+         tool0 -> wrist_camera_link -> wrist_camera_optical_frame
+
+       The body link sits 8 cm off the tool axis (the Robotiq occupies the
+       axis itself - a future gripper will too) and 10 cm beyond the
+       flange, looking outward along the gripper approach (its local +x
+       points along tool0's +z), so the grasp region is in frame. The
+       optical frame is the standard ROS convention (+z forward, +x image
+       right, +y image down) via a fixed rpy(-pi/2, 0, -pi/2) rotation from
+       the body link; camera parameters live in
+       bartender_gazebo/config/bartender_scene.yaml and are guarded against
+       drift by test_bartender_scene.py, this file's rate included.
+
+       Massless links on fixed joints: fine for TF, and sdformat lumps them
+       into the parent when spawning, re-targeting the sensor pose to
+       wrist_3_link correctly. -->
+  <link name="wrist_camera_link"/>
+  <link name="wrist_camera_optical_frame"/>
+  <joint name="tool0_to_wrist_camera" type="fixed">
+    <parent link="tool0"/>
+    <child link="wrist_camera_link"/>
+    <origin xyz="0.08 0 0.10" rpy="0 -1.5708 0"/>
+  </joint>
+  <joint name="wrist_camera_to_optical" type="fixed">
+    <parent link="wrist_camera_link"/>
+    <child link="wrist_camera_optical_frame"/>
+    <origin xyz="0 0 0" rpy="-1.5708 0 -1.5708"/>
+  </joint>
+
+  <gazebo reference="wrist_camera_link">
+    <sensor name="wrist_camera" type="camera">
       <always_on>true</always_on>
-      <update_rate>15</update_rate>
-      <topic>/bartender/arm_a/wrist_camera/image_raw</topic>
+      <update_rate>10</update_rate>
+      <topic>/camera/wrist/image_raw</topic>
       <camera>
         <horizontal_fov>1.047</horizontal_fov>
         <image>
-          <width>320</width>
-          <height>240</height>
+          <width>640</width>
+          <height>480</height>
           <format>R8G8B8</format>
         </image>
         <clip>

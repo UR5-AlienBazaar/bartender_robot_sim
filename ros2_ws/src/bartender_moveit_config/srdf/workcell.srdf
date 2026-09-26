@@ -99,8 +99,8 @@
        always in contact or never can be. Every link from upper_arm_link out
        STAYS checked against the table: that is the collision this whole
        table link exists to catch on the real robot. -->
-  <disable_collisions link1="workcell_table" link2="base_link" reason="Adjacent"/>
-  <disable_collisions link1="workcell_table" link2="base_link_inertia" reason="Adjacent"/>
-  <disable_collisions link1="workcell_table" link2="shoulder_link" reason="Never"/>
+  <disable_collisions link1="bartender_table" link2="base_link" reason="Adjacent"/>
+  <disable_collisions link1="bartender_table" link2="base_link_inertia" reason="Adjacent"/>
+  <disable_collisions link1="bartender_table" link2="shoulder_link" reason="Never"/>
 
 </robot>

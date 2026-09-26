@@ -55,7 +55,7 @@ def test_the_arm_stands_at_35_35_on_the_table(sim):
 def test_the_table_is_140_by_70_from_the_corner(sim):
     """And it runs from the corner in +x and +y, so the arm is on it."""
     table = next(link for link in sim.findall('link')
-                 if link.get('name') == 'workcell_table')
+                 if link.get('name') == 'bartender_table')
     collision = table.find('collision')
     size = [float(v) for v in collision.find('geometry/box').get('size').split()]
     centre = [float(v) for v in collision.find('origin').get('xyz').split()]
