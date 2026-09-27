@@ -9,7 +9,7 @@
 #       bartender@10.42.0.200:pi_code/
 #   ssh bartender@10.42.0.200 'cd pi_code && ./run_arm.sh'
 #
-# Usage: ./run_arm.sh [--ros-args -p can_ids:='[779, 141]']
+# Usage: ./run_arm.sh [--ros-args -p can_ids:='[779, 558]']
 # Stop:  Ctrl-C, or pkill -f "python3 .*[m]ab_arm_node"
 set -e
 

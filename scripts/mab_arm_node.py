@@ -6,8 +6,9 @@ Runs on the Pi that carries the CANdle. Subscribes to
     /roboarm/joint_command   std_msgs/Float64MultiArray
 
 where data[i] is the ABSOLUTE target position in radians for joint i.
-Joints map 1:1 to MD CAN IDs (default [779], the MA-p-45-10_KV75). Each
-move is
+Joints map 1:1 to MD CAN IDs (default [779, 558]: the MA-p-45-10_KV75
+and the MA-d-gl40). Joint names carry the CAN ID (joint779, joint558)
+so positions can be told apart on /joint_states. Each move is
 executed with candletool's trapezoidal position profile; the positions
 streamed during the move are published on /joint_states. A new command
 preempts the move in flight. One candletool runs at a time (the CANdle is
@@ -34,11 +35,11 @@ class MabArmDriver(Node):
 
     def __init__(self):
         super().__init__('mab_arm_driver')
-        self.declare_parameter('can_ids', [779])
+        self.declare_parameter('can_ids', [779, 558])
         self.declare_parameter('joint_command_topic', '/roboarm/joint_command')
         self.declare_parameter('poll_period', 2.0)
         can_ids = [int(i) for i in self.get_parameter('can_ids').value]
-        self.joints = [(f'joint{i + 1}', cid) for i, cid in enumerate(can_ids)]
+        self.joints = [(f'joint{cid}', cid) for cid in can_ids]
         cmd_topic = self.get_parameter('joint_command_topic').value
         self.create_subscription(Float64MultiArray, cmd_topic,
                                  self.on_command, 10)
@@ -48,8 +49,9 @@ class MabArmDriver(Node):
         self.proc = None
         self.positions = [0.0] * len(self.joints)
         threading.Thread(target=self.worker, daemon=True).start()
-        self.get_logger().info(
-            f'joints {self.joints}, listening on {cmd_topic}')
+        for name, cid in self.joints:
+            self.get_logger().info(f'motor CAN ID {cid} -> /joint_states as {name}')
+        self.get_logger().info(f'listening on {cmd_topic}')
 
     def on_command(self, msg):
         n = len(self.joints)
