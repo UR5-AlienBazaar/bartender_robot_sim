@@ -158,6 +158,28 @@ whose scripts are not all taught is also refused ("not ready yet"), since
 `/make` would only refuse it. `/can` is not offered
 yet, because it needs a station and a glass that free text rarely names.
 
+**Move the rpi4 arm.** The MAB arm on the Pi (CANdle + MA-d-gl40,
+`mab_arm_node.py` in the `pi_camera_publisher` repo) is commanded through
+this same server. `POST /arm/move` sends **absolute** joint targets in
+radians — the shape a VLM/VLA policy emits — and `GET /arm/state` returns
+its live positions:
+
+```bash
+curl -X POST http://127.0.0.1:8090/arm/move \
+  -H 'Content-Type: application/json' -d '{"joints": [0.5]}'
+curl http://127.0.0.1:8090/arm/state
+```
+
+These routes touch neither the UR arms nor the sim: they forward over HTTP
+to the bridge on the Pi (`arm_http_bridge.py`, started by `run_arm.sh` on
+`10.42.0.200:8092`), which publishes `/roboarm/joint_command` on the Pi's
+ROS domain. The arm node executes each command as an absolute trapezoidal
+move and preempts a move in flight; `/arm/state` is its `/joint_states`.
+Pass `--pi-arm URL` to point elsewhere, or an empty `--pi-arm ''` to
+disable the routes. A command is validated for shape only (1-6 finite
+numbers) — there are no per-joint bounds yet, so the trusted-caller rules
+under "Safety" apply to this route most of all.
+
 **From another machine on the same LAN:** bind to this host's LAN address
 instead of localhost, e.g. `ros2 run bartender_api server --host
 192.168.1.155`, and use that address in place of `127.0.0.1` above. The
