@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- FastDDS profile for talking to the Raspberry Pi camera stack (10.42.0.200)
+     from a laptop on a different subnet, where multicast discovery does not
+     cross the router. Mirrors ~/pi_code/.fastdds.xml on the Pi.
+     Usage: FASTRTPS_DEFAULT_PROFILES_FILE=this file, then any ros2 command. -->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>lan</transport_id>
+      <type>UDPv4</type>
+      <interfaceWhiteList><address>172.17.22.212</address></interfaceWhiteList>
+      <maxMessageSize>1400</maxMessageSize>
+      <sendBufferSize>16777216</sendBufferSize>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="laptop" is_default_profile="true">
+    <rtps>
+      <userTransports><transport_id>lan</transport_id></userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+      <builtin>
+        <initialPeersList>
+          <locator><udpv4><address>10.42.0.200</address></udpv4></locator>
+        </initialPeersList>
+      </builtin>
+    </rtps>
+  </participant>
+</profiles>

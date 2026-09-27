@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- FastDDS TCP SERVER profile: used on the Raspberry Pi. The laptop cannot
+     accept inbound connections from the 10.42.0.x subnet, so the Pi listens
+     on TCP 4212 and the laptop connects out to it. -->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>tcp_server</transport_id>
+      <type>TCPv4</type>
+      <listening_ports><port>4212</port></listening_ports>
+      <sendBufferSize>16777216</sendBufferSize>
+      <receiveBufferSize>16777216</receiveBufferSize>
+    </transport_descriptor>
+    <transport_descriptor>
+      <transport_id>shm</transport_id>
+      <type>SHM</type>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="pi" is_default_profile="true">
+    <rtps>
+      <userTransports><transport_id>tcp_server</transport_id><transport_id>shm</transport_id></userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+    </rtps>
+  </participant>
+</profiles>
