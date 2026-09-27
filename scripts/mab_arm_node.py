@@ -6,7 +6,8 @@ Runs on the Pi that carries the CANdle. Subscribes to
     /roboarm/joint_command   std_msgs/Float64MultiArray
 
 where data[i] is the ABSOLUTE target position in radians for joint i.
-Joints map 1:1 to MD CAN IDs (default [558], the MA-d-gl40). Each move is
+Joints map 1:1 to MD CAN IDs (default [779], the MA-p-45-10_KV75). Each
+move is
 executed with candletool's trapezoidal position profile; the positions
 streamed during the move are published on /joint_states. A new command
 preempts the move in flight. One candletool runs at a time (the CANdle is
@@ -33,7 +34,7 @@ class MabArmDriver(Node):
 
     def __init__(self):
         super().__init__('mab_arm_driver')
-        self.declare_parameter('can_ids', [558])
+        self.declare_parameter('can_ids', [779])
         self.declare_parameter('joint_command_topic', '/roboarm/joint_command')
         self.declare_parameter('poll_period', 2.0)
         can_ids = [int(i) for i in self.get_parameter('can_ids').value]
