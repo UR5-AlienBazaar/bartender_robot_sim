@@ -26,9 +26,29 @@ SAMPLE = dict(zip(ARM, [0.079, -1.905, 2.337, -0.432, 1.65, 0.0]))
 
 # -- what a step may be -----------------------------------------------------
 
-def test_the_three_kinds_are_the_ones_the_pendant_runs():
+def test_the_kinds_are_the_ones_the_pendant_runs():
     """If a kind is added here without an executor, a file can outrun it."""
-    assert STEP_KINDS == ('goto', 'grip', 'wait')
+    assert STEP_KINDS == ('goto', 'movej', 'movel', 'grip', 'wait')
+
+
+@pytest.mark.parametrize('kind', ['movej', 'movel'])
+def test_movej_and_movel_round_trip_through_the_file(kind):
+    step = Step.from_dict({kind: ' whiskey_pour '})
+    assert step.arg == 'whiskey_pour'
+    assert step.describe() == f'{kind} whiskey_pour'
+    assert step.to_dict() == {kind: 'whiskey_pour'}
+
+
+@pytest.mark.parametrize('kind', ['movej', 'movel'])
+def test_movej_and_movel_need_a_point(kind):
+    with pytest.raises(PipelineError):
+        Step(kind, '')
+
+
+def test_every_move_kind_counts_as_a_point_the_pipeline_needs():
+    p = Pipeline('p', [Step('goto', 'a'), Step('movej', 'b'),
+                       Step('movel', 'c'), Step('wait', 1.0)])
+    assert p.point_names() == ['a', 'b', 'c']
 
 
 def test_a_goto_keeps_its_point_name():

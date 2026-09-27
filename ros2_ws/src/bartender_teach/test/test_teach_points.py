@@ -146,6 +146,11 @@ class FakeNode:
         self.arms_moved.append(arm.key)
         return True, ''
 
+    def move_pilz(self, kind, positions, label='', arm=ARM_A):
+        self.pilz_moves = getattr(self, 'pilz_moves', [])
+        self.pilz_moves.append((kind, dict(positions), arm.key))
+        return True, ''
+
     def move_cartesian(self, pose, avoid_collisions=True, label='', arm=ARM_A):
         self.cartesian.append((pose, avoid_collisions))
         self.arms_jogged = getattr(self, 'arms_jogged', [])
@@ -328,6 +333,53 @@ def test_goto_incomplete_point_moves_nothing(pendant):
     pendant.store.add(Point('half', {'shoulder_pan_joint': 0.1}))
     pendant.dispatch('goto half')
     assert pendant.node.joint_moves == []
+
+
+@pytest.mark.parametrize('kind', ['movej', 'movel'])
+def test_movej_and_movel_send_the_stored_joints_to_pilz(pendant, kind):
+    pendant.store.add(Point('target', SAMPLE))
+    pendant.dispatch(f'{kind} target')
+    assert pendant.node.joint_moves == []          # not the OMPL goto
+    (sent_kind, joints, arm), = pendant.node.pilz_moves
+    assert (sent_kind, arm) == (kind, 'a')
+    assert joints == pytest.approx(SAMPLE)
+
+
+def test_movel_unknown_point_moves_nothing(pendant):
+    pendant.dispatch('movel nowhere')
+    assert getattr(pendant.node, 'pilz_moves', []) == []
+
+
+def test_movel_is_refused_in_freedrive(pendant):
+    pendant.store.add(Point('target', SAMPLE))
+    pendant.node.robot.freedrive = True
+    pendant.dispatch('movel target')
+    assert getattr(pendant.node, 'pilz_moves', []) == []
+
+
+def test_movej_and_movel_are_recorded_as_themselves(pendant):
+    pendant.store.add(Point('p1', SAMPLE))
+    pendant.store.add(Point('p2', SAMPLE))
+    pendant.dispatch('record demo')
+    pendant.dispatch('movej p1')
+    pendant.dispatch('movel p2')
+    pendant.dispatch('pipeline step movel p1')
+    assert [s.describe() for s in pendant.recording.steps] == \
+        ['movej p1', 'movel p2', 'movel p1']
+
+
+def test_running_replays_movej_and_movel_with_pilz(pendant):
+    pendant.store.add(Point('p1', SAMPLE))
+    pendant.dispatch('record demo')
+    pendant.dispatch('goto p1')
+    pendant.dispatch('movej p1')
+    pendant.dispatch('movel p1')
+    pendant.dispatch('stop')
+    pendant.node.joint_moves.clear()
+    pendant.node.pilz_moves.clear()
+    pendant.dispatch('run demo')
+    assert len(pendant.node.joint_moves) == 1
+    assert [k for k, _, _ in pendant.node.pilz_moves] == ['movej', 'movel']
 
 
 def test_gripper_commands(pendant):

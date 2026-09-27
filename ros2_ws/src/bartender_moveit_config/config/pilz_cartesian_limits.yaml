@@ -1,0 +1,15 @@
+# Cartesian speed limits for the Pilz LIN planner (the pendant's `movel`).
+# Merged into robot_description_planning beside joint_limits.yaml.
+#
+# 0.25 m/s and 1.2 m/s^2 are the UR's own moveL defaults (250 mm/s,
+# 1200 mm/s^2). The real arm is slowed further by the speed slider.
+#
+# max_rot_vel is low (0.52 rad/s, 30 deg/s) on purpose. Pilz scales the
+# rotational acceleration off it, and at 1.57 a movel that is mostly
+# rotation (tilting a bottle about its spout) asked the wrist for over its
+# 5 rad/s^2 and was refused. 30 deg/s is also a sane pouring speed.
+cartesian_limits:
+  max_trans_vel: 0.25
+  max_trans_acc: 1.2
+  max_trans_dec: -1.2
+  max_rot_vel: 0.52

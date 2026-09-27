@@ -85,7 +85,9 @@ teach> export whiskey_pregrasp
 | `state` | joints, flange pose, gripper, right now |
 | `list` | every point, both arms |
 | `save NAME [note]` | record where the arm is; `resave` to overwrite |
-| `goto NAME` | plan and move there in joint space |
+| `goto NAME` | plan and move there in joint space (OMPL, around obstacles) |
+| `movej NAME` | straight line in joint space there, like UR MoveJ (Pilz PTP) |
+| `movel NAME` | flange in a straight line there, like UR MoveL (Pilz LIN) |
 | `jog j1..j6 DEG` | one joint |
 | `jog x\|y\|z MM` | straight line along a base axis |
 | `jog tx\|ty\|tz MM` | straight line along a flange axis — `tz` is approach |
@@ -114,14 +116,14 @@ describing a skill, and the half that used to exist only as Python inside an
 action server.
 
 `record` turns teaching into sequence-building. While it is on, `save`,
-`goto`, `open`, `close` and `wait` each append a step as well as doing their
+`goto`, `movej`, `movel`, `open`, `close` and `wait` each append a step as well as doing their
 job, so the sequence falls out of the teaching you were doing anyway instead
 of being reconstructed afterwards with the robot already somewhere else.
 
 ```
 teach[a]> record pour_v2  spirit first, mixer second
   recording pour_v2.
-  save, goto and the gripper commands now also append a step. Jogs do not:
+  save, goto, movej, movel and the gripper commands now also append a step. Jogs do not:
   they are how you reach a point, and a relative move cannot be replayed.
   `save` with no name auto-names. `stop` when the sequence is complete.
 teach[a] rec:pour_v2> jog tz -40

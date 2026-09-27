@@ -277,7 +277,9 @@ replaces it.
 | `jog x\|y\|z MM` | Straight line along the table's axes (x is along the table, z is up) |
 | `jog tz MM` | Straight line along the gripper's pointing direction |
 | `save NAME [note]` | Remember where the arm is now |
-| `goto NAME` | Move to a saved point |
+| `goto NAME` | Move to a saved point, on a path planned around obstacles |
+| `movej NAME` | Move to a saved point, straight in joint space (like the UR's MoveJ) |
+| `movel NAME` | Move the flange to a saved point in a straight line (like the UR's MoveL) |
 | `list` | All saved points |
 | `open` / `close [0-0.8]` | Gripper (does nothing on the real robot while it is simulated) |
 | `help` | Everything else, including recording sequences |
@@ -339,9 +341,36 @@ the grasp point, close, lift, go home. To check it, run `run grab_whiskey dry`
 bottle back, visit the same points in reverse: `goto whiskey_lift`,
 `goto whiskey_grasp`, `open`, `goto whiskey_pregrasp`.
 
+### goto, movej or movel
+
+All three end at a saved point, on the arm it was taught on. They differ in
+the path they take to get there:
+
+| | Path | Use it for |
+|---|---|---|
+| `goto` | Planned around obstacles (OMPL). Can take a different, roundabout path each time. | Long moves with things in the way |
+| `movej` | Every joint turns at once and they all arrive together, like the UR's MoveJ. The same path every time. | Moves between approach points and home |
+| `movel` | The flange travels in a straight line (UR MoveL, at up to 250 mm/s). | Going in to grab a bottle, lifting, pulling back out |
+
+`movej` and `movel` do not go around obstacles. If the straight path
+collides, or the arm can't follow it (a joint limit or singularity on the
+way), they refuse **before** anything moves, and say why. Use `movej` or
+`goto` from somewhere else in that case. The UR speed slider slows all three.
+
+In a script, the step is written the same way: `{movel: grab_whiskey}`.
+While recording, `movej NAME` and `movel NAME` add that kind of step. `save`
+always adds a `goto`. To make a saved step a straight line, either:
+- run `pipeline drop` then `pipeline step movel NAME` straight after the
+  `save`, or
+- change `goto:` to `movel:` in `workcell_points.yaml`.
+
+The API's `/pick` and `/make` run scripts as they are, so they use
+whichever kind each step is.
+
 Things to know:
 
-- **Jogs are not recorded**, only `save`, `goto`, `open`/`close` and `wait`.
+- **Jogs are not recorded**, only `save`, `goto`, `movej`, `movel`,
+  `open`/`close` and `wait`.
   So jog as much as you like between saves.
 - **`jog tz`** moves along the direction the gripper points. That is the
   approach direction, so the fingers slide straight onto the bottle.
@@ -380,6 +409,37 @@ The grip point is 145 mm in front of the flange along tz. The measurements
 are `WORKCELL_SPOUT` in
 [`tool_frames.py`](../ros2_ws/src/bartender_teach/bartender_teach/tool_frames.py). Only rotation jogs use the tool;
 translation jogs and saved points are unaffected.
+
+### Pouring and putting the bottle back
+
+Each bottle has two more scripts, which run after `grab_<bottle>`:
+
+| Script | Does |
+|---|---|
+| `pour_<bottle>` | `movej` to `pour` (bottle upright over the glass), tilt +90° about base +x around that bottle's spout in six 15° `movel` steps, wait 3 s, tilt back the same way to `pour` |
+| `return_<bottle>` | `movej` back over the bottle's spot, `movel` down onto its mark, open the gripper, `movel` straight back out to the approach point |
+
+So one bottle is `run grab_whiskey`, `run pour_whiskey`,
+`run return_whiskey`. These are the scripts the drinks menu runs for the
+spirit.
+
+- **`pour` is the one taught point.** The tilt points
+  (`pour_<bottle>_15` … `_90`) are computed from it with the spout tool, so
+  the spout stays in the same place during the whole tilt. **Re-teach `pour`
+  and they must be recomputed.**
+- **Which way it tips:** at `pour` the bottle is held out along +y. +90°
+  about +x lays it on its side with the neck pointing toward −y, back
+  toward the arm, and the spout stays where it was. If it should tip the
+  other way, it needs recomputing with −90°.
+- **How much it pours** is the `wait: 3.0` step in `pour_<bottle>` in
+  `workcell_points.yaml`. Edit it there.
+- **Getting to `pour` uses `movej`, not `movel`.** `movej` keeps an open
+  bottle within about 2° of upright on the way. A `movel` from the whiskey
+  lift point would turn the wrist over halfway.
+- Only `pour` and the whiskey points were taught on the robot. The tilt
+  points and every vodka and gin point were computed offline and have run
+  only on the mock arm so far. Run them slowly the first time, with an empty
+  bottle.
 
 ### Picking a bottle through the API
 

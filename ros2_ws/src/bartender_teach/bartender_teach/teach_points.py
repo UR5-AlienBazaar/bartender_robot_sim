@@ -57,7 +57,7 @@ from moveit_msgs.msg import (
 from moveit_msgs.srv import GetCartesianPath, GetPositionFK
 from sensor_msgs.msg import JointState
 
-from bartender_teach.pipelines import Pipeline, PipelineError, Step
+from bartender_teach.pipelines import MOVE_KINDS, Pipeline, PipelineError, Step
 from bartender_teach.point_store import (
     Point, PointStore, PointStoreError, default_points_path, points_path_for,
 )
@@ -141,6 +141,15 @@ CARTESIAN_STEP = 0.005
 MIN_CARTESIAN_FRACTION = 0.95
 GRIPPER_MAX_EFFORT = 100.0
 
+# movej / movel: the Pilz planner, which moves the way a UR program does.
+# See move_group.launch.py for the pipeline and pilz_cartesian_limits.yaml
+# for movel's speed (the UR's own 250 mm/s). movej is scaled down to about
+# the UR's moveJ default of 1.05 rad/s; at 1.0 it would swing every joint at
+# its full 180 deg/s. The speed slider slows both further on the real arm.
+PILZ_PIPELINE = 'pilz_industrial_motion_planner'
+PILZ_PLANNERS = {'movej': 'PTP', 'movel': 'LIN'}
+PILZ_SCALING = {'movej': (0.35, 0.3), 'movel': (1.0, 0.5)}   # (vel, acc)
+
 # Refused, not clamped -- see the module docstring.
 MAX_JOG_MM = 150.0
 MAX_JOG_DEG = 45.0
@@ -178,6 +187,19 @@ ARM_SETTLE_VELOCITY = 0.01    # rad/s, per joint
 ARM_SETTLE_TIMEOUT_S = 5.0
 
 AXES = {'x': (1.0, 0.0, 0.0), 'y': (0.0, 1.0, 0.0), 'z': (0.0, 0.0, 1.0)}
+
+# What the MoveIt error codes usually mean for a movej / movel. The plain
+# numbers have sent people looking in the wrong place before.
+PILZ_HINTS = {
+    -1: ': no straight path there, e.g. a joint limit or singularity on the '
+        'line; try movej or goto',
+    -2: ': the path is invalid, usually because it collides; goto plans '
+        'around obstacles',
+    -4: ': the controller gave up, e.g. a protective stop',
+    -6: ': the move timed out',
+    -12: ': the point itself is in collision',
+    -31: ': no IK solution along the line; try movej or goto',
+}
 
 
 class TeachNode(Node):
@@ -388,6 +410,50 @@ class TeachNode(Node):
                 f'{attempt + 1}/{PLAN_ATTEMPTS} failed ({last})')
         return False, last
 
+    def move_pilz(self, kind, positions, label='', arm=DEFAULT_ARM):
+        """Move to joint `positions` the UR way: `movej` or `movel`.
+
+        movej is a straight line in joint space, movel a straight line of the
+        flange to where those joints put it. Both are planned by Pilz, which
+        does not go around obstacles: MoveIt still refuses a path that
+        collides (it checks before executing), but will not look for another.
+
+        Not retried like move_to_joints: Pilz is not randomised, so a second
+        attempt plans the same path and fails the same way.
+        """
+        velocity, acceleration = PILZ_SCALING[kind]
+        goal = MoveGroup.Goal()
+        goal.request = MotionPlanRequest(
+            group_name=arm.group,
+            pipeline_id=PILZ_PIPELINE,
+            planner_id=PILZ_PLANNERS[kind],
+            goal_constraints=[Constraints(joint_constraints=[
+                JointConstraint(joint_name=n, position=float(v),
+                                tolerance_above=JOINT_TOLERANCE,
+                                tolerance_below=JOINT_TOLERANCE, weight=1.0)
+                for n, v in positions.items()])],
+            allowed_planning_time=PLANNING_TIME_S,
+            num_planning_attempts=1,
+            max_velocity_scaling_factor=velocity,
+            max_acceleration_scaling_factor=acceleration,
+        )
+        goal.planning_options = PlanningOptions(plan_only=False)
+        if not self._move_group.wait_for_server(timeout_sec=10.0):
+            return False, 'move_action server not available'
+        # Pilz refuses to plan from a moving start state.
+        self.wait_until_settled(arm)
+        handle = self._block_on(
+            self._move_group.send_goal_async(goal), timeout_sec=15.0)
+        if handle is None or not handle.accepted:
+            return False, f'{kind} goal rejected'
+        result = self._block_on(handle.get_result_async(), timeout_sec=90.0)
+        if result is None:
+            return False, f'{kind} timed out'
+        code = result.result.error_code.val
+        if code == 1:
+            return True, ''
+        return False, f'{kind} failed (error_code {code}{PILZ_HINTS.get(code, "")})'
+
     def move_cartesian(self, pose, avoid_collisions=True, label='',
                        arm=DEFAULT_ARM):
         """Straight line of the arm's flange to a pose in ITS base frame."""
@@ -465,6 +531,8 @@ HELP = """\
   resave NAME [note...]    same, overwriting an existing point
   rm NAME                  delete a point
   goto NAME                plan and move there, on the arm it was taught on
+  movej NAME               straight line in joint space there (UR moveJ)
+  movel NAME               flange in a straight line there (UR moveL)
 
   jog j1..j6 DEG           one joint, degrees
   jog x|y|z MM             straight line along a base axis
@@ -480,7 +548,8 @@ HELP = """\
   run NAME [dry]           replay one; `dry` lists the steps without moving
   pipeline                 list them
   pipeline show|rm NAME    one in full, or delete it
-  pipeline step KIND VAL   append by hand while recording (goto|grip|wait)
+  pipeline step KIND VAL   append by hand while recording
+                           (goto|movej|movel|grip|wait)
   pipeline drop [N]        remove the last step, or step N
   pipeline export [NAME]   print as a Python literal
   tool [NAME]              list tool centre points, or select one
@@ -497,16 +566,18 @@ HELP = """\
   file                     which point file is being edited
   help | quit
 
-Everything except `list`, `show` and `goto` acts on the SELECTED arm. Jog and
+Everything except `list`, `show` and the moves to a point acts on the
+SELECTED arm. Jog and
 pose axes are in that arm's own base frame, which for arm B is b_base_link --
 the two arms do not share an origin.
 
 The robot, speed and freedrive commands only work on the real robot
 (workcell_real or workcell_twin); in the simulation they say so.
 
-While recording, `save`, `goto`, `open` and `close` also append a step, and
-`save` with no name auto-names it after the pipeline. Jogs never become
-steps: they are how you reach a point, and a relative move does not replay.
+While recording, `save`, `goto`, `movej`, `movel`, `open` and `close` also
+append a step, and `save` with no name auto-names it after the pipeline.
+Jogs never become steps: they are how you reach a point, and a relative move
+does not replay.
 """
 
 
@@ -779,21 +850,39 @@ class Pendant:
         driving arm A to arm B's configuration, would both be worse than just
         going. Says which arm it used when that is not the selected one.
         """
+        self._move_command('goto', args)
+
+    def cmd_movej(self, args):
+        """Drive to a point in a straight line in joint space (UR moveJ)."""
+        self._move_command('movej', args)
+
+    def cmd_movel(self, args):
+        """Drive the flange to a point in a straight line (UR moveL)."""
+        self._move_command('movel', args)
+
+    def _move_command(self, kind, args):
         if not args:
-            raise ValueError('goto needs a point name')
+            raise ValueError(f'{kind} needs a point name')
         self._refuse_in_freedrive()
         point = self.store.get(args[0])
         arm = self._arm_for(point)
-        target = dict(zip(arm.joints, point.joints_in_order(list(arm.joints))))
         on = '' if arm.key == self.arm.key else f' on {arm.label}'
-        print(f'  moving to {point.name}{on} ...')
-        ok, why = self.node.move_to_joints(target, point.name, arm)
+        how = '' if kind == 'goto' else f' ({kind})'
+        print(f'  moving to {point.name}{on}{how} ...')
+        ok, why = self._move(kind, point, arm)
         self._report(ok, why, f'at {point.name}')
         # Only a move that arrived becomes a step. Recording a failed one
         # would write a pipeline whose first run is already known not to
         # work, and the operator has just been told it failed.
         if ok:
-            self._record('goto', point.name)
+            self._record(kind, point.name)
+
+    def _move(self, kind, point, arm):
+        """Drive `arm` to `point` with one of MOVE_KINDS."""
+        target = dict(zip(arm.joints, point.joints_in_order(list(arm.joints))))
+        if kind == 'goto':
+            return self.node.move_to_joints(target, point.name, arm)
+        return self.node.move_pilz(kind, target, point.name, arm)
 
     def _arm_for(self, point):
         """Return the arm a stored point belongs to, by group then joints."""
@@ -1018,8 +1107,8 @@ class Pendant:
         self.store.pipelines[name] = self.recording
         self.store.save()
         print(f'  recording {name}.')
-        print('  save, goto and the gripper commands now also append a step. '
-              'Jogs do not:')
+        print('  save, goto, movej, movel and the gripper commands now also '
+              'append a step. Jogs do not:')
         print('  they are how you reach a point, and a relative move cannot '
               'be replayed.')
         print('  `save` with no name auto-names. `stop` when the sequence is '
@@ -1084,7 +1173,7 @@ class Pendant:
 
     def _dry_detail(self, step):
         """Say which arm a step would drive, for a dry run's step line."""
-        if step.kind == 'goto':
+        if step.kind in MOVE_KINDS:
             try:
                 return f'   -> {self._arm_for(self.store.get(step.arg)).label}'
             except (ValueError, PointStoreError):
@@ -1098,12 +1187,9 @@ class Pendant:
         if step.kind == 'wait':
             time.sleep(step.arg)
             return True, ''
-        if step.kind == 'goto':
+        if step.kind in MOVE_KINDS:
             point = self.store.get(step.arg)
-            arm = self._arm_for(point)
-            target = dict(zip(arm.joints,
-                              point.joints_in_order(list(arm.joints))))
-            return self.node.move_to_joints(target, point.name, arm)
+            return self._move(step.kind, point, self._arm_for(point))
         return self.node.command_gripper(step.arg, self._step_arm(step))
 
     def _recording_or_refuse(self, doing):
@@ -1154,7 +1240,7 @@ class Pendant:
             raise ValueError('pipeline step needs a kind and a value, e.g. '
                              '`pipeline step wait 0.5`')
         kind, raw, note = args[0].lower(), args[1], ' '.join(args[2:])
-        if kind == 'goto':
+        if kind in MOVE_KINDS:
             self.store.get(raw)          # refuse a step to a point that is
             self._record(kind, raw, None, note)   # not there
             return
@@ -1219,8 +1305,8 @@ class Pendant:
         print(f'  # {pipeline.name}{note}')
         print(f'  {pipeline.name.upper()} = [')
         for step in pipeline.steps:
-            if step.kind == 'goto':
-                body = f"('goto', {step.arg!r}),"
+            if step.kind in MOVE_KINDS:
+                body = f"({step.kind!r}, {step.arg!r}),"
             elif step.kind == 'grip':
                 body = f"('grip', {step.arg:.4f}, {step.arm!r}),"
             else:
@@ -1331,7 +1417,8 @@ class Pendant:
     COMMANDS = {
         'state': cmd_state, 'list': cmd_list, 'ls': cmd_list, 'show': cmd_show,
         'save': cmd_save, 'resave': cmd_resave, 'rm': cmd_rm, 'del': cmd_rm,
-        'goto': cmd_goto, 'jog': cmd_jog, 'open': cmd_open, 'close': cmd_close,
+        'goto': cmd_goto, 'movej': cmd_movej, 'movel': cmd_movel,
+        'jog': cmd_jog, 'open': cmd_open, 'close': cmd_close,
         'safety': cmd_safety, 'export': cmd_export, 'file': cmd_file,
         'tool': cmd_tool, 'arm': cmd_arm,
         'record': cmd_record, 'stop': cmd_stop, 'run': cmd_run,

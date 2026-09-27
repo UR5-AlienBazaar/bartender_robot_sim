@@ -23,6 +23,14 @@ File format, under the same top level as `points:`::
           - {goto: whiskey_pour}
           - {wait: 0.5}
           - {goto: home}
+          - {movej: whiskey_approach}
+          - {movel: whiskey_pour}
+
+The three moves all end at a taught point and differ in the path there:
+
+    goto    planned by OMPL around obstacles; the path is whatever it found
+    movej   straight line in joint space (UR moveJ), Pilz PTP
+    movel   straight line of the flange (UR moveL), Pilz LIN
 
 WHY STEPS REFERENCE POINTS AND NEVER RELATIVE MOVES
 ---------------------------------------------------
@@ -49,7 +57,10 @@ import datetime
 # What a step may be, and what its argument means. Adding a kind means adding
 # it here, giving it a validator, and teaching Pendant how to execute it --
 # in that order, so a file can never name a step the pendant cannot run.
-STEP_KINDS = ('goto', 'grip', 'wait')
+STEP_KINDS = ('goto', 'movej', 'movel', 'grip', 'wait')
+
+# The step kinds that drive to a named point. Their argument is a point name.
+MOVE_KINDS = ('goto', 'movej', 'movel')
 
 # Bounds on the numeric steps. Both are refused rather than clamped, for the
 # same reason jog distances are (see MAX_JOG_MM in teach_points): a clamped
@@ -80,7 +91,7 @@ class Step:
     """One instruction in a pipeline.
 
     `kind` is one of STEP_KINDS and `arg` is its argument: a point name for
-    `goto`, radians for `grip`, seconds for `wait`. The pair is validated on
+    the MOVE_KINDS, radians for `grip`, seconds for `wait`. The pair is validated on
     construction, so a Step that exists is a Step the pendant can run.
     """
 
@@ -92,7 +103,7 @@ class Step:
         self.note = str(note or '')
         # WHICH ARM, for the steps that cannot work it out themselves.
         #
-        # `goto` never needs this: a point carries the joint names it was
+        # A move never needs this: a point carries the joint names it was
         # taught with, so there is exactly one arm it can mean. `grip` has
         # nothing to go on -- 0.25 rad is a perfectly good command to either
         # gripper -- so the arm is recorded with the step. Without it a
@@ -107,10 +118,10 @@ class Step:
 
     @staticmethod
     def _checked(kind, arg):
-        if kind == 'goto':
+        if kind in MOVE_KINDS:
             name = str(arg or '').strip()
             if not name:
-                raise PipelineError('a goto step needs a point name')
+                raise PipelineError(f'a {kind} step needs a point name')
             return name
         # bool is an int in Python and `grip: true` is a plausible thing to
         # type into a YAML file; it would otherwise arrive here as 1.0 rad.
@@ -137,8 +148,8 @@ class Step:
 
     def describe(self):
         """One line, in the same words the pendant takes as a command."""
-        if self.kind == 'goto':
-            body = f'goto {self.arg}'
+        if self.kind in MOVE_KINDS:
+            body = f'{self.kind} {self.arg}'
         elif self.kind == 'grip':
             body = f'grip {self.arg:.3f}'
             if self.arm:
@@ -148,7 +159,8 @@ class Step:
         return f'{body}  -- {self.note}' if self.note else body
 
     def to_dict(self):
-        arg = self.arg if self.kind == 'goto' else round(float(self.arg), 6)
+        arg = (self.arg if self.kind in MOVE_KINDS
+               else round(float(self.arg), 6))
         d = {self.kind: arg}
         if self.arm:
             d['arm'] = self.arm
@@ -194,7 +206,7 @@ class Pipeline:
 
     def point_names(self):
         """Every point this pipeline drives to, in order, with repeats."""
-        return [s.arg for s in self.steps if s.kind == 'goto']
+        return [s.arg for s in self.steps if s.kind in MOVE_KINDS]
 
     def missing_points(self, store):
         """Names this pipeline needs that `store` does not have.

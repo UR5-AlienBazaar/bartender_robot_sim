@@ -5,6 +5,18 @@ to pour a drink and to open a beer in Gazebo Sim simulation, before anything
 touches a real robot or a user-facing interface. This file covers setup and
 day-to-day commands.
 
+> **For the hackathon, use the workcell.** The robot that actually exists
+> is one UR5e with a 2F-85 on a table, and that is what we run now: see
+> ["The workcell"](#the-workcell-one-arm-the-real-robot) below, and
+> [docs/WORKCELL.md](docs/WORKCELL.md) for step by step. Its points, scripts
+> and drinks menu are the current ones (`--file workcell`,
+> `--points workcell`), and its API is
+> [docs/WORKCELL_API.md](docs/WORKCELL_API.md).
+>
+> The two-armed bar described next is the simulation this project started
+> from. It still builds and runs, but it isn't what the hackathon demo uses,
+> so ignore its sections unless you are working on it on purpose.
+
 **New here, or building something on top of this?** Start with
 [docs/](docs/README.md):
 [ARCHITECTURE](docs/ARCHITECTURE.md) (how it fits together and where to add
@@ -74,7 +86,13 @@ any of the above packages later and something stops rendering.
   bottle while the other presses the opener onto its cap. `layout.py` holds
   every pose and dimension it depends on and has no ROS in it, so it can be
   checked without a simulator.
-- `bartender_teach` -- teach pendant, GUI and tool frames.
+- `bartender_teach` -- teach pendant, GUI and tool frames. Also holds the
+  taught points and scripts (`config/*_points.yaml`) and the workcell's
+  drinks menu (`config/workcell_menu.yaml`).
+- `bartender_api` -- HTTP/JSON server that runs taught scripts: pick a
+  bottle, make a drink (see [docs/WORKCELL_API.md](docs/WORKCELL_API.md)).
+- `ar_button_bridge` -- turns HTTP button presses from the Spectacles AR
+  glasses (or any other computer) into `std_msgs/Int32` on `/ar/button`.
 - `models/` -- Gazebo models. Hand-written: `bar_counter`,
   `jack_daniels_bottle`, `cola_bottle`, `serving_glass`.
   Generated, by the scripts in `bartender_gazebo/scripts/` -- edit those and
@@ -187,6 +205,8 @@ transient ament-index/discovery glitch, not a real error -- just retry it.
 
 ## The workcell (one arm, the real robot)
 
+**This is the setup to use during the hackathon.**
+
 The robot that actually exists is **one UR5e with the 2F-85 on a 1.40 x 0.70
 table**, its base 0.35 in from one end and 0.35 in from the long side, so it
 sits on the table's centreline and has 1.05 of table in front of it:
@@ -235,18 +255,55 @@ Gazebo can move the robot. Checked with the mock robot: after teach-pendant
 jogs the twin's six joints matched to 0.0000 rad, and its gripper followed
 0.4 -> 0.02 -> 0.7.
 
-Then drive it with the teach pendant tool, `ros2 run bartender_teach teach`
-(or `teach_gui`); see `bartender_teach/README.md`. On the real robot the
-pendant also powers it on (`robot on`), plays the program (`robot play`),
-sets the speed slider (`speed 20`) and switches freedrive (`freedrive on`).
+Then drive it with the teach pendant tool,
+`ros2 run bartender_teach teach_gui --file workcell` (or `teach`); see
+`bartender_teach/README.md`. `--file workcell` keeps the workcell's points in
+`bartender_teach/config/workcell_points.yaml`, apart from the bar's. On the
+real robot the pendant also powers it on (`robot on`), plays the program
+(`robot play`), sets the speed slider (`speed 20`) and switches freedrive
+(`freedrive on`).
 
-Two numbers are **guesses until someone measures the real cell**, and both
-are launch arguments: `arm_yaw` (which way the base faces; the xacro header
-says how to check it, and that the UR teach pendant's Base frame is turned
-180 degrees from ROS's `base_link`) and `table_height` (0.75). The gripper is
-**mocked** on the real robot until it is decided whether it is wired through
+`arm_yaw` (which way the base faces) is **-1.5708**, set from the real cell.
+`table_height` (0.75) is still **a guess until someone measures it**; it is
+a launch argument. The gripper is **mocked** on the real robot until it is decided whether it is wired through
 the UR's tool connector or its own USB adapter (`gripper_fake_hardware:=false`
 plus `use_tool_communication:=true` for the former).
+
+### Bottles, pouring and drinks
+
+Three bottles stand in a row along +y: whiskey, then vodka 130 mm further
+along, then gin 255 mm along. Each bottle has three scripts, all in
+`workcell_points.yaml`:
+
+| Script | Does |
+|---|---|
+| `grab_<bottle>` | Open, go in, close, lift, pull away |
+| `pour_<bottle>` | To the `pour` point over the glass, tilt +90° about the bottle's spout, wait 3 s, tilt back |
+| `return_<bottle>` | Set the bottle back down on its mark, let go, pull back out |
+
+The whiskey points and `pour` were taught on the robot. The vodka and gin
+points and the pour tilts were computed from them (UR5e kinematics, each
+bottle's spout tool `workcell_<bottle>`). All of them have run on mock
+hardware, not yet on the real arm.
+
+The pendant moves to a point in three ways: `goto` (planned around
+obstacles), `movej` (straight in joint space, like the UR's MoveJ) and
+`movel` (the flange in a straight line, like MoveL). `movej`/`movel` use
+MoveIt's Pilz planner and refuse, before moving, a straight path that
+collides or cannot be followed.
+
+To run them from another program:
+
+```bash
+ros2 run bartender_api server --points workcell
+curl -X POST http://127.0.0.1:8090/pick -H 'Content-Type: application/json' -d '{"bottle": "whiskey"}'
+curl http://127.0.0.1:8090/drinks       # the menu, and which drinks are ready
+```
+
+A drink (`POST /make`) runs grab, pour and return for its spirit, then the
+same for its mixer. None is ready yet: the mixers (cola, sprite, fanta) have
+no scripts. The full reference is [docs/WORKCELL.md](docs/WORKCELL.md)
+("Teaching the bottles" onwards) and [docs/WORKCELL_API.md](docs/WORKCELL_API.md).
 
 ### Connecting the real robot over Ethernet
 
@@ -278,7 +335,7 @@ Step by step, with moving the arm and recovery, in
    commands."* when it is in control. (In Local mode: `headless_mode:=false`
    and press play on the External Control program on the pendant.)
 6. **First moves**: speed slider at 10-20%, a hand on the e-stop, and check
-   `arm_yaw` before anything else. MoveIt's acceleration limits in
+   the arm moves the way the Gazebo twin shows before anything else. MoveIt's acceleration limits in
    `joint_limits.yaml` were tuned for sim; the slider scales them down,
    because `ur_arm_controller` is the driver's speed-scaled trajectory
    controller.

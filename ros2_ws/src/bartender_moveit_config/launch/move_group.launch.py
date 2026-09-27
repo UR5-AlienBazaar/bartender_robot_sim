@@ -90,13 +90,29 @@ def launch_setup(context):
     # parameter is given a file path, not when pre-parsed into a plain dict.
     robot_description_kinematics = os.path.join(pkg_moveit_config, 'config',
                                                 'kinematics.yaml')
-    robot_description_planning = {
-        'robot_description_planning': load_yaml(
-            pkg_moveit_config, os.path.join('config', 'joint_limits.yaml'))
-    }
+    # Joint limits for every planner, plus the Cartesian speed limits the
+    # Pilz LIN planner needs (see pilz_cartesian_limits.yaml).
+    planning_limits = load_yaml(
+        pkg_moveit_config, os.path.join('config', 'joint_limits.yaml'))
+    planning_limits.update(load_yaml(
+        pkg_moveit_config, os.path.join('config', 'pilz_cartesian_limits.yaml')))
+    robot_description_planning = {'robot_description_planning': planning_limits}
 
+    # Two planning pipelines. OMPL is the default, and is what every request
+    # that does not name a pipeline gets: it plans around obstacles, so the
+    # path between two points is whatever it found. Pilz is asked for by name
+    # (pipeline_id) and moves the way a UR program does: PTP is a straight
+    # line in joint space (UR moveJ) and LIN a straight line of the flange
+    # (UR moveL). The pendant's movej/movel use it; goto stays on OMPL.
     ompl_planning_pipeline_config = {
-        'move_group': {
+        'planning_pipelines': ['ompl', 'pilz_industrial_motion_planner'],
+        'default_planning_pipeline': 'ompl',
+        'pilz_industrial_motion_planner': {
+            'planning_plugin': 'pilz_industrial_motion_planner/CommandPlanner',
+            'request_adapters': '',
+            'default_planner_config': 'PTP',
+        },
+        'ompl': {
             'planning_plugin': 'ompl_interface/OMPLPlanner',
             'request_adapters': (
                 'default_planner_request_adapters/AddTimeOptimalParameterization '
@@ -108,7 +124,7 @@ def launch_setup(context):
             'start_state_max_bounds_error': 0.1,
         }
     }
-    ompl_planning_pipeline_config['move_group'].update(
+    ompl_planning_pipeline_config['ompl'].update(
         load_yaml(pkg_moveit_config, os.path.join('config', 'ompl_planning.yaml'))
     )
 
