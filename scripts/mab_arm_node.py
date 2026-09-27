@@ -47,7 +47,7 @@ class MabArmDriver(Node):
         self.target = None
         self.lock = threading.Lock()
         self.proc = None
-        self.positions = [0.0] * len(self.joints)
+        self.positions = [float('nan')] * len(self.joints)
         threading.Thread(target=self.worker, daemon=True).start()
         for name, cid in self.joints:
             self.get_logger().info(f'motor CAN ID {cid} -> /joint_states as {name}')
@@ -92,8 +92,9 @@ class MabArmDriver(Node):
                 ['candletool', 'md', '--id', str(can_id), 'info'],
                 capture_output=True, text=True, timeout=30).stdout
             m = POS_RE.search(out)
-            if m:
-                self.positions[i] = float(m.group(1))
+            # NaN when the motor does not answer, so it is never
+            # mistaken for a real 0.0 rad
+            self.positions[i] = float(m.group(1)) if m else float('nan')
         self.publish_state()
 
     def worker(self):
