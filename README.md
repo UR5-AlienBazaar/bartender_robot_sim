@@ -271,8 +271,8 @@ plus `use_tool_communication:=true` for the former).
 
 ### Bottles, pouring and drinks
 
-Three bottles stand in a row along +y: whiskey, then vodka 130 mm further
-along, then gin 255 mm along. Each bottle has three scripts, all in
+Three bottles stand in a row along +y: whiskey, vodka and Jägermeister
+(`jager`; it replaced gin on 2026-09-27). Each bottle has three scripts, all in
 `workcell_points.yaml`:
 
 | Script | Does |
@@ -281,10 +281,13 @@ along, then gin 255 mm along. Each bottle has three scripts, all in
 | `pour_<bottle>` | To the `pour` point over the glass, tilt +90° about the bottle's spout, wait 3 s, tilt back |
 | `return_<bottle>` | Set the bottle back down on its mark, let go, pull back out |
 
-The whiskey points and `pour` were taught on the robot. The vodka and gin
-points and the pour tilts were computed from them (UR5e kinematics, each
-bottle's spout tool `workcell_<bottle>`). All of them have run on mock
-hardware, not yet on the real arm.
+**The points are being re-taught from scratch (2026-09-27):** the old ones
+are in `config/workcell_points.backup_20260927_1432.yaml`. The whiskey and
+vodka scripts are kept and work again once their points are taught under
+the same names. The jager scripts have to be recorded. The pour tilt points
+(`pour_<bottle>_15` … `_90`) are computed from `pour` and each bottle's
+spout tool `workcell_<bottle>`, so they are recomputed after `pour` is
+taught.
 
 The pendant moves to a point in three ways: `goto` (planned around
 obstacles), `movej` (straight in joint space, like the UR's MoveJ) and

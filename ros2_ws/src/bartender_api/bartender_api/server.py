@@ -444,6 +444,10 @@ def main(args=None):
                              'on the Pi). Empty string disables the '
                              '/arm/* routes.')
     # ros2 run passes --ros-args through; argparse must not choke on it.
+    parser.add_argument('--gripper', choices=('auto', 'robotiq', 'mab'),
+                        default='auto',
+                        help='mab: arm A\'s gripper is the workcell\'s custom '
+                             'one on the Pi (bartender_teach/mab_gripper.py)')
     opts, _ = parser.parse_known_args(sys.argv[1:] if args is None else args)
 
     calib, ok = _load_calibration(opts.perception, opts.camera_config)
@@ -460,7 +464,7 @@ def main(args=None):
 
     rclpy.init(args=None)
     pose_cache = PoseCache()
-    teach_node = TeachNode(cache_pose=True)
+    teach_node = TeachNode(cache_pose=True, gripper=opts.gripper)
     executor = MultiThreadedExecutor()
     executor.add_node(pose_cache)
     executor.add_node(teach_node)

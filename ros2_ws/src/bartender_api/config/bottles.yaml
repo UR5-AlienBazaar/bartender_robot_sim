@@ -11,8 +11,10 @@ bottles:
     type: vodka
     volume_ml: 500
     aliases: [Zubrowka]
-  # Volume not read from phone photos yet; 700 ml is the EU size, check the bottle.
-  - brand: Tenjaku
-    type: gin
+  # Volume not read from photos yet; 700 ml is the EU size, check the bottle.
+  # Type `jager` rather than liqueur: it is the name the workcell's scripts
+  # (grab_jager, ...) and the /pick bottle use.
+  - brand: Jägermeister
+    type: jager
     volume_ml: 700
-    aliases: [天雀]
+    aliases: [Jagermeister, Jaegermeister]

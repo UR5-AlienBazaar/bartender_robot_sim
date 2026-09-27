@@ -258,6 +258,20 @@ class PointStore:
                 raise PointStoreError(str(exc)) from None
         return store
 
+    def reload(self):
+        """Re-read the file into THIS store, for edits made outside the tool.
+
+        In place, so every holder of this object (the pendant, the browser
+        pendant's bridge) sees the new contents. Without it a running
+        pendant keeps the old points in memory and its next save quietly
+        undoes whatever was written to the file meanwhile.
+        """
+        fresh = PointStore.load(self.path)
+        self.frame, self.group = fresh.frame, fresh.group
+        self.eef_link = fresh.eef_link
+        self.points, self.pipelines = fresh.points, fresh.pipelines
+        return self
+
     def save(self):
         """Write the file, atomically.
 

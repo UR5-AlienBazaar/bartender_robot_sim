@@ -56,7 +56,9 @@ from moveit_msgs.msg import (
 )
 from moveit_msgs.srv import GetCartesianPath, GetPositionFK
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Float64MultiArray
 
+from bartender_teach import mab_gripper
 from bartender_teach.pipelines import MOVE_KINDS, Pipeline, PipelineError, Step
 from bartender_teach.point_store import (
     Point, PointStore, PointStoreError, default_points_path, points_path_for,
@@ -171,6 +173,19 @@ GRIPPER_LOWER_LIMIT = 0.0
 GRIPPER_LIMIT_MARGIN = 0.02
 GRIPPER_OPEN_POS = GRIPPER_LOWER_LIMIT + GRIPPER_LIMIT_MARGIN
 GRIPPER_UPPER_LIMIT = 0.8
+# The MAB gripper's homing (TeachNode.home_mab_gripper). The Pi reads the
+# motor about every 2 s, and not at all while it moves.
+MAB_READING_TIMEOUT_S = 8.0
+MAB_HOME_TIMEOUT_S = 25.0
+MAB_SETTLED_RAD = 0.02
+# Two readings this far apart in time that agree mean it is at rest. The Pi
+# streams positions many times a second during a move, so back-to-back
+# readings agree even while the fingers are still creeping.
+MAB_SETTLE_WINDOW_S = 0.5
+# Homing only ever closes. Opening by more than this means something is
+# wrong (a stale reading, a shifted position, someone else commanding the
+# motor), and homing stops the motor where it is instead of carrying on.
+MAB_WRONG_WAY_RAD = 0.15
 
 # Wait for the arm to stop before planning anything from where it is. Not
 # optional: without it, a jog issued straight after a move plans from a start
@@ -205,11 +220,16 @@ PILZ_HINTS = {
 class TeachNode(Node):
     """The ROS half: reads state, and moves the arm when told to."""
 
-    def __init__(self, cache_pose=False):
+    def __init__(self, cache_pose=False, gripper='auto'):
         super().__init__('bartender_teach')
         cb = ReentrantCallbackGroup()
-        self._joint_state = None
+        self._positions = {}      # joint name -> latest position
+        self._velocities = {}     # joint name -> latest velocity, or None
+        self._state_lock = threading.Lock()
         self._have_state = threading.Event()
+        # Bumped on every message that carries the MAB gripper, so a
+        # reading can be told to be newer than a command.
+        self._mab_updates = 0
         self._pose_cache = None
         self._pose_lock = threading.Lock()
 
@@ -229,6 +249,17 @@ class TeachNode(Node):
             for arm in ARMS.values()
         }
         self._gripper = self._grippers[DEFAULT_ARM.key]
+        # Arm A's gripper: `mab` is the workcell's custom one, a MAB drive on
+        # the Pi (see mab_gripper.py); `robotiq` the 2F-85 action; `auto`
+        # picks mab whenever the Pi's node is listening, so the pendant
+        # needs no flag on the real cell and still drives the sim's Robotiq.
+        if gripper not in ('auto', 'robotiq', 'mab'):
+            raise ValueError(
+                f'gripper must be auto, robotiq or mab, not {gripper!r}')
+        self.gripper_kind = gripper
+        self._mab_pub = (None if gripper == 'robotiq' else
+                         self.create_publisher(
+                             Float64MultiArray, mab_gripper.TOPIC, 10))
         self._cartesian = self.create_client(
             GetCartesianPath, 'compute_cartesian_path', callback_group=cb)
         self._fk = self.create_client(
@@ -277,7 +308,22 @@ class TeachNode(Node):
         return self.tool_pose(None, arm)
 
     def _on_joint_state(self, msg):
-        self._joint_state = msg
+        """Merge `msg` into what is known about every joint, by NAME.
+
+        /joint_states has more than one publisher: the UR's broadcaster and,
+        on the real cell, the Pi's MAB gripper node, which publishes only its
+        own motors. Keeping just the last message meant that whenever the
+        gripper's arrived last, the arm "was not publishing" its joints and
+        every move failed. So each message updates only the joints it names.
+        """
+        velocities = (msg.velocity if len(msg.velocity) == len(msg.name)
+                      else [None] * len(msg.name))
+        with self._state_lock:
+            for name, pos, vel in zip(msg.name, msg.position, velocities):
+                self._positions[name] = pos
+                self._velocities[name] = vel
+            if mab_gripper.JOINT in msg.name:
+                self._mab_updates += 1
         self._have_state.set()
 
     @staticmethod
@@ -298,10 +344,8 @@ class TeachNode(Node):
 
     def joints(self):
         """Every joint currently published, as name -> position."""
-        msg = self._joint_state
-        if msg is None:
-            return {}
-        return dict(zip(msg.name, msg.position))
+        with self._state_lock:
+            return dict(self._positions)
 
     def arm_joints(self, arm=DEFAULT_ARM):
         """Just the six joints of `arm`, in its own order.
@@ -321,22 +365,31 @@ class TeachNode(Node):
                 f'up and are the controllers running?')
         return {j: allj[j] for j in arm.joints}
 
+    def _uses_mab(self, arm):
+        if self._mab_pub is None or arm.key != DEFAULT_ARM.key:
+            return False
+        return (self.gripper_kind == 'mab'
+                or self._mab_pub.get_subscription_count() > 0)
+
     def gripper_position(self, arm=DEFAULT_ARM):
+        """Gripper opening in Robotiq knuckle radians, whichever gripper."""
+        if self._uses_mab(arm):
+            motor = self.joints().get(mab_gripper.JOINT)
+            ref = mab_gripper.load_ref()
+            if motor is None or motor != motor or ref is None:  # NaN too
+                return None
+            return mab_gripper.knuckle_from_motor(motor, ref)
         return self.joints().get(arm.gripper_joint)
 
     def wait_until_settled(self, arm=DEFAULT_ARM):
         """Block until every joint of `arm` reports (near) zero velocity."""
         deadline = time.time() + ARM_SETTLE_TIMEOUT_S
         while time.time() < deadline:
-            js = self._joint_state
-            if js is not None and len(js.velocity) >= len(js.name):
-                try:
-                    speeds = [abs(js.velocity[js.name.index(j)])
-                              for j in arm.joints]
-                except ValueError:
-                    speeds = []
-                if speeds and max(speeds) < ARM_SETTLE_VELOCITY:
-                    return
+            with self._state_lock:
+                speeds = [self._velocities.get(j) for j in arm.joints]
+            if (speeds and None not in speeds
+                    and max(abs(v) for v in speeds) < ARM_SETTLE_VELOCITY):
+                return
             time.sleep(0.05)
         self.get_logger().warn(
             f'arm still moving after {ARM_SETTLE_TIMEOUT_S:.1f}s; '
@@ -505,6 +558,8 @@ class TeachNode(Node):
                 f'Refusing rather than clamping -- and note the floor is '
                 f'not 0: a knuckle parked on its lower limit stops '
                 f'responding for the rest of the run.')
+        if self._uses_mab(arm):
+            return self._command_mab(position)
         client = self._grippers[arm.key]
         if not client.wait_for_server(timeout_sec=10.0):
             return False, f"{arm.label}'s gripper action server not available"
@@ -520,6 +575,114 @@ class TeachNode(Node):
         # and staying active is what holds the squeeze. See the gripper notes
         # in pour_action_server and in controllers.yaml.
         return True, ''
+
+    def _command_mab(self, knuckle):
+        """Open or close the MAB gripper, and give it time to get there.
+
+        Measured from the closed stop that `gripper home` found (see
+        mab_gripper.py): there is no end stop on the open side, so opening
+        is refused until the gripper has been homed, and whenever the
+        reading says the stored stop no longer matches the motor.
+
+        Waited on, unlike the Robotiq goal: the next step of a pipeline is
+        usually a lift, and it must not start before the fingers have
+        closed.
+        """
+        if self._mab_pub.get_subscription_count() == 0:
+            return False, (f'nothing is listening on {mab_gripper.TOPIC}: is '
+                           f'run_arm.sh running on the Pi (10.42.0.200)?')
+        ref = mab_gripper.load_ref()
+        if ref is None:
+            return False, ('the gripper has not been homed: empty it and run '
+                           '`gripper home` (the Home gripper button)')
+        motor = self.joints().get(mab_gripper.JOINT)
+        if (motor == motor and motor is not None
+                and mab_gripper.is_stale(motor, ref)):
+            return False, (f'the gripper reads {motor:.2f} rad, outside the '
+                           f'stroke its closed stop at {ref:.2f} allows: its '
+                           f'position has shifted. Empty it and run '
+                           f'`gripper home` again')
+        target = mab_gripper.motor_from_knuckle(knuckle, ref)
+        self._mab_pub.publish(Float64MultiArray(data=[target]))
+        time.sleep(mab_gripper.MOVE_WAIT_S)
+        return True, ''
+
+    def _fresh_mab_position(self, timeout):
+        """Wait for the gripper's next reading from the Pi; None on timeout."""
+        with self._state_lock:
+            seen = self._mab_updates
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            with self._state_lock:
+                if self._mab_updates > seen:
+                    motor = self._positions.get(mab_gripper.JOINT)
+                    seen = self._mab_updates
+                    if motor is not None and motor == motor:     # not NaN
+                        return motor
+            time.sleep(0.05)
+        return None
+
+    def _settled_mab_position(self, timeout):
+        """Wait for the gripper to be at rest; its position, or None."""
+        deadline = time.time() + timeout
+        last = None
+        while time.time() < deadline:
+            motor = self._fresh_mab_position(max(deadline - time.time(), 0.1))
+            if motor is None:
+                return None
+            if last is not None and abs(motor - last) < MAB_SETTLED_RAD:
+                return motor
+            last = motor
+            time.sleep(MAB_SETTLE_WINDOW_S)
+        return None
+
+    def home_mab_gripper(self):
+        """Close the EMPTY gripper onto its closed stop and remember it there.
+
+        The stop is the one position that survives the drive losing power,
+        so open and close are measured from it. Starts from a reading taken
+        at rest, aims HOME_SWEEP below it (more than the whole stroke), and
+        takes the position it stalls at. Watches the way it moves: homing
+        only closes, so a gripper that opens instead is stopped where it is
+        and nothing is stored.
+        """
+        if self._mab_pub is None or self._mab_pub.get_subscription_count() == 0:
+            return False, (f'nothing is listening on {mab_gripper.TOPIC}: is '
+                           f'run_arm.sh running on the Pi (10.42.0.200)?')
+        start = self._settled_mab_position(MAB_READING_TIMEOUT_S)
+        if start is None:
+            return False, (f'no steady reading of {mab_gripper.JOINT} from '
+                           f'the Pi in {MAB_READING_TIMEOUT_S:.0f} s')
+        target = start - mab_gripper.HOME_SWEEP
+        self.get_logger().info(
+            f'homing the gripper: from {start:.3f} towards {target:.3f} rad')
+        self._mab_pub.publish(Float64MultiArray(data=[target]))
+        sent = time.time()
+        deadline = sent + MAB_HOME_TIMEOUT_S
+        anchor = None                          # (time, position) to compare
+        while time.time() < deadline:
+            motor = self._fresh_mab_position(MAB_READING_TIMEOUT_S)
+            if motor is None:
+                continue
+            if motor > start + MAB_WRONG_WAY_RAD:
+                self._mab_pub.publish(Float64MultiArray(data=[motor]))
+                return False, (
+                    f'homing went the OPEN way: from {start:.3f} to '
+                    f'{motor:.3f} rad while aiming for {target:.3f}. Stopped '
+                    f'there; nothing stored. Is anything else commanding the '
+                    f'gripper (arm_http_bridge, /arm/move)?')
+            now = time.time()
+            if anchor is None:
+                anchor = (now, motor)
+            elif now - anchor[0] >= MAB_SETTLE_WINDOW_S:
+                if (abs(motor - anchor[1]) < MAB_SETTLED_RAD
+                        and now - sent >= mab_gripper.MOVE_WAIT_S):
+                    mab_gripper.save_ref(motor)
+                    return True, (f'closed stop at {motor:.3f} rad '
+                                  f'(started at {start:.3f})')
+                anchor = (now, motor)
+        return False, ('the gripper did not come to rest on its closed stop '
+                       f'within {MAB_HOME_TIMEOUT_S:.0f} s')
 
 
 HELP = """\
@@ -541,6 +704,8 @@ HELP = """\
                            selected tool's tip still (see `tool`)
 
   open | close [POS]       gripper (POS in radians, default 0.5)
+  gripper home             workcell gripper: close it EMPTY onto its stop, so
+                           open/close know where they are (after power loss)
   wait [SECONDS]           pause, and record the pause (default 1)
 
   record NAME [note...]    start building a pipeline out of what you teach
@@ -564,6 +729,7 @@ HELP = """\
   safety [on|off]          collision checking for Cartesian jogs
   export [NAME]            print as a pour_action_server source snippet
   file                     which point file is being edited
+  reload                   re-read the point file after it was edited outside
   help | quit
 
 Everything except `list`, `show` and the moves to a point acts on the
@@ -976,6 +1142,10 @@ class Pendant:
         ok, why = self.node.move_cartesian(pose, self.safety, label, self.arm)
         self._report(ok, why, f'jogged {label}')
 
+    def node_uses_mab(self):
+        uses = getattr(self.node, '_uses_mab', None)
+        return bool(uses and uses(self.arm))
+
     def cmd_open(self, args):
         ok, why = self.node.command_gripper(GRIPPER_OPEN_POS, self.arm)
         self._report(ok, why, f"{self.arm.label}'s gripper opening")
@@ -984,11 +1154,30 @@ class Pendant:
 
     def cmd_close(self, args):
         pos = self._number(args[0], 'gripper position') if args else 0.5
+        if self.node_uses_mab():
+            print('  (MAB gripper: closes until it stalls, whatever POS says)')
         ok, why = self.node.command_gripper(pos, self.arm)
         self._report(ok, why,
                      f"{self.arm.label}'s gripper closing to {pos:.3f}")
         if ok:
             self._record('grip', pos, self.arm.key)
+
+    def cmd_gripper(self, args):
+        """`gripper home`: find the MAB gripper's closed stop."""
+        if [a.lower() for a in args] != ['home']:
+            print('  usage: gripper home')
+            return
+        home = getattr(self.node, 'home_mab_gripper', None)
+        if home is None or not self.node_uses_mab():
+            print("  only the workcell's MAB gripper is homed; is run_arm.sh "
+                  'running on the Pi?')
+            return
+        print('  homing the gripper: closing it onto its stop (keep it '
+              'EMPTY) ...')
+        ok, why = home()
+        self._report(ok, why, f'gripper homed, {why}')
+        if ok:
+            self._record('gripper', 'home')
 
     def cmd_wait(self, args):
         """Pause, and record the pause when recording.
@@ -1190,6 +1379,11 @@ class Pendant:
         if step.kind in MOVE_KINDS:
             point = self.store.get(step.arg)
             return self._move(step.kind, point, self._arm_for(point))
+        if step.kind == 'gripper':
+            home = getattr(self.node, 'home_mab_gripper', None)
+            if home is None:
+                return False, 'this gripper has no homing'
+            return home()
         return self.node.command_gripper(step.arg, self._step_arm(step))
 
     def _recording_or_refuse(self, doing):
@@ -1309,6 +1503,8 @@ class Pendant:
                 body = f"({step.kind!r}, {step.arg!r}),"
             elif step.kind == 'grip':
                 body = f"('grip', {step.arg:.4f}, {step.arm!r}),"
+            elif step.kind == 'gripper':
+                body = f"('gripper', {step.arg!r}),"
             else:
                 body = f"('wait', {step.arg:g}),"
             print(f'      {body}'
@@ -1411,6 +1607,14 @@ class Pendant:
                  if self.store.pipelines else '')
         print(f'  {self.store.path}  ({len(self.store)} point(s){extra})')
 
+    def cmd_reload(self, args):
+        """Re-read the point file, after it was edited outside the pendant."""
+        if self.recording is not None:
+            print(f'  stop recording {self.recording.name} first')
+            return
+        self.store.reload()
+        self.cmd_file(args)
+
     def cmd_help(self, args):
         print(HELP, end='')
 
@@ -1419,7 +1623,9 @@ class Pendant:
         'save': cmd_save, 'resave': cmd_resave, 'rm': cmd_rm, 'del': cmd_rm,
         'goto': cmd_goto, 'movej': cmd_movej, 'movel': cmd_movel,
         'jog': cmd_jog, 'open': cmd_open, 'close': cmd_close,
+        'gripper': cmd_gripper,
         'safety': cmd_safety, 'export': cmd_export, 'file': cmd_file,
+        'reload': cmd_reload,
         'tool': cmd_tool, 'arm': cmd_arm,
         'record': cmd_record, 'stop': cmd_stop, 'run': cmd_run,
         'wait': cmd_wait,
@@ -1488,6 +1694,9 @@ def main(args=None):
     argv = sys.argv[1:]
     if '--file' in argv:
         path = points_path_for(argv[argv.index('--file') + 1])
+    gripper = 'auto'
+    if '--gripper' in argv:
+        gripper = argv[argv.index('--gripper') + 1]
 
     try:
         store = PointStore.load(path)
@@ -1499,7 +1708,7 @@ def main(args=None):
         return 1
 
     rclpy.init(args=args)
-    node = TeachNode()
+    node = TeachNode(gripper=gripper)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
     spin = threading.Thread(target=executor.spin, daemon=True)

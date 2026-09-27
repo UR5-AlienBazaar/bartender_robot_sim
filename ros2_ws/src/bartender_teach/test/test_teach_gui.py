@@ -47,6 +47,9 @@ class GuiFakeNode(FakeNode):
         both['b_robotiq_85_left_knuckle_joint'] = 0.2
         return both
 
+    def gripper_position(self, arm=ARM_A):
+        return self.joints().get(arm.gripper_joint)
+
     def cached_pose(self, arm=ARM_A):
         return self.tool_pose(None, arm)
 
@@ -263,7 +266,7 @@ def test_state_carries_the_tool_and_its_tip(bridge):
     assert s['tip'] == [0.5, 0.1, 0.3]        # tool0 tip is the flange
     assert {t['name'] for t in s['tools']} == {
         'tool0', 'whiskey_spout', 'cola_spout',
-        'workcell_whiskey', 'workcell_vodka', 'workcell_gin'}
+        'workcell_whiskey', 'workcell_vodka', 'workcell_jager', 'workcell_bottle'}
 
 
 def test_selecting_a_tool_moves_the_reported_tip(bridge):

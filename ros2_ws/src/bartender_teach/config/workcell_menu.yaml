@@ -10,7 +10,7 @@
 # menu can be written before the scripts exist.
 #
 # The scripts named here, per ingredient (teach each with `record NAME` on
-# the pendant; only grab_whiskey exists so far):
+# the pendant):
 #
 #   grab_<x>     pick the bottle up from its spot (what /pick runs)
 #   pour_<x>     pour it into the glass
@@ -28,13 +28,13 @@ drinks:
     name: Whiskey & Sprite
     scripts: [grab_whiskey, pour_whiskey, return_whiskey,
               grab_sprite, pour_sprite, return_sprite]
-  gin_sprite:
-    name: Gin & Sprite
-    scripts: [grab_gin, pour_gin, return_gin,
+  jager_sprite:
+    name: Jägermeister & Sprite
+    scripts: [grab_jager, pour_jager, return_jager,
               grab_sprite, pour_sprite, return_sprite]
-  gin_fanta:
-    name: Gin & Fanta
-    scripts: [grab_gin, pour_gin, return_gin,
+  jager_fanta:
+    name: Jägermeister & Fanta
+    scripts: [grab_jager, pour_jager, return_jager,
               grab_fanta, pour_fanta, return_fanta]
   vodka_cola:
     name: Vodka & Cola

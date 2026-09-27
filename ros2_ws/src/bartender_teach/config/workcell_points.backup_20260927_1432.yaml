@@ -1,0 +1,897 @@
+# Robot points taught with `ros2 run bartender_teach teach`.
+#
+# Angles are RADIANS. `joints` is a mapping so that joint order can never be
+# lost; `pose` is the forward kinematics at the moment the point was recorded
+# and is informational only -- nothing replays it, so editing it does nothing.
+#
+# Safe to hand-edit. The tool rewrites this file wholesale on save, so
+# comments added below this header will not survive a save from the tool.
+frame: base_link
+group: ur_manipulator
+eef_link: tool0
+points:
+  approach_grab_gin:
+    joints:
+      elbow_joint: 1.164757
+      shoulder_lift_joint: -0.767966
+      shoulder_pan_joint: 1.418549
+      wrist_1_joint: -0.397103
+      wrist_2_joint: -0.148768
+      wrist_3_joint: 1.58611
+    recorded: '2026-09-25T20:36:22'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - -0.130129
+      - 0.680315
+      - 0.206462
+      quat_xyzw:
+      - 0.006535
+      - 0.707093
+      - -0.004075
+      - -0.707079
+    gripper: 0.7929
+    tool: tool0
+    note: 'Not taught: aproach_grab_whiskey moved 255 mm along tool +y (computed offline, UR5e nominal
+      kinematics).'
+  approach_grab_vodka:
+    joints:
+      elbow_joint: 1.637122
+      shoulder_lift_joint: -1.039148
+      shoulder_pan_joint: 1.384357
+      wrist_1_joint: -0.598228
+      wrist_2_joint: -0.18296
+      wrist_3_joint: 1.586052
+    recorded: '2026-09-25T20:36:22'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - -0.130564
+      - 0.555329
+      - 0.208337
+      quat_xyzw:
+      - 0.006535
+      - 0.707093
+      - -0.004075
+      - -0.707079
+    gripper: 0.7929
+    tool: tool0
+    note: 'Not taught: aproach_grab_whiskey moved 130 mm along tool +y (computed offline, UR5e nominal
+      kinematics).'
+  aproach_grab_whiskey:
+    joints:
+      elbow_joint: 2.000058
+      shoulder_lift_joint: -1.128282
+      shoulder_pan_joint: 0.934992
+      wrist_1_joint: -0.891427
+      wrist_2_joint: -0.602025
+      wrist_3_joint: 1.616803
+    recorded: '2026-09-27T14:25:25'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.052307
+      - 0.433588
+      - 0.145556
+      quat_xyzw:
+      - -0.022635
+      - -0.71067
+      - -0.001427
+      - 0.70316
+    gripper: 0.064087
+    tool: tool0
+  away_up_gin:
+    joints:
+      elbow_joint: 0.930741
+      shoulder_lift_joint: -0.852665
+      shoulder_pan_joint: 1.357326
+      wrist_1_joint: -0.075623
+      wrist_2_joint: -0.21192
+      wrist_3_joint: 1.588809
+    recorded: '2026-09-25T20:36:22'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - -0.087848
+      - 0.683579
+      - 0.352302
+      quat_xyzw:
+      - -0.007763
+      - -0.706882
+      - 0.006669
+      - 0.707258
+    gripper: 0.7929
+    tool: tool0
+    note: 'Not taught: away_up_whiskey moved 255 mm along tool +y (computed offline, UR5e nominal kinematics).'
+  away_up_vodka:
+    joints:
+      elbow_joint: 1.434587
+      shoulder_lift_joint: -1.175974
+      shoulder_pan_joint: 1.309129
+      wrist_1_joint: -0.256607
+      wrist_2_joint: -0.260116
+      wrist_3_joint: 1.589268
+    recorded: '2026-09-25T20:36:22'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - -0.08804
+      - 0.558605
+      - 0.354853
+      quat_xyzw:
+      - -0.007763
+      - -0.706882
+      - 0.006669
+      - 0.707258
+    gripper: 0.7929
+    tool: tool0
+    note: 'Not taught: away_up_whiskey moved 130 mm along tool +y (computed offline, UR5e nominal kinematics).'
+  away_up_whiskey:
+    joints:
+      elbow_joint: 1.817914
+      shoulder_lift_joint: -1.483498
+      shoulder_pan_joint: 1.228055
+      wrist_1_joint: -0.332874
+      wrist_2_joint: -0.34119
+      wrist_3_joint: 1.589754
+    recorded: '2026-09-25T18:46:34'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - -0.08824
+      - 0.428633
+      - 0.357506
+      quat_xyzw:
+      - -0.007762
+      - -0.706882
+      - 0.006669
+      - 0.707258
+    gripper: 0.7929
+    tool: tool0
+  grab_gin:
+    joints:
+      elbow_joint: 1.126286
+      shoulder_lift_joint: -0.747056
+      shoulder_pan_joint: 1.537505
+      wrist_1_joint: -0.37988
+      wrist_2_joint: -0.029669
+      wrist_3_joint: 1.586599
+    recorded: '2026-09-25T20:36:22'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - -0.210317
+      - 0.680641
+      - 0.206383
+      quat_xyzw:
+      - -0.006638
+      - -0.707082
+      - 0.004076
+      - 0.707088
+    gripper: 0.7929
+    tool: tool0
+    note: 'Not taught: grab_whiskey moved 255 mm along tool +y (computed offline, UR5e nominal kinematics).'
+  grab_vodka:
+    joints:
+      elbow_joint: 1.601987
+      shoulder_lift_joint: -1.018037
+      shoulder_pan_joint: 1.530774
+      wrist_1_joint: -0.584481
+      wrist_2_joint: -0.0364
+      wrist_3_joint: 1.586478
+    recorded: '2026-09-25T20:36:22'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - -0.21077
+      - 0.555657
+      - 0.208277
+      quat_xyzw:
+      - -0.006638
+      - -0.707082
+      - 0.004076
+      - 0.707088
+    gripper: 0.7929
+    tool: tool0
+    note: 'Not taught: grab_whiskey moved 130 mm along tool +y (computed offline, UR5e nominal kinematics).'
+  grab_whiskey:
+    joints:
+      elbow_joint: 1.994803
+      shoulder_lift_joint: -1.273709
+      shoulder_pan_joint: 1.519505
+      wrist_1_joint: -0.721499
+      wrist_2_joint: -0.047669
+      wrist_3_joint: 1.586353
+    recorded: '2026-09-25T18:43:18'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - -0.211241
+      - 0.425672
+      - 0.210247
+      quat_xyzw:
+      - -0.006638
+      - -0.707082
+      - 0.004076
+      - 0.707088
+    gripper: 0.7929
+    tool: tool0
+  gripper home:
+    joints:
+      elbow_joint: 2.059991
+      shoulder_lift_joint: -1.131057
+      shoulder_pan_joint: 1.191978
+      wrist_1_joint: -1.028038
+      wrist_2_joint: -0.40389
+      wrist_3_joint: 1.695176
+    recorded: '2026-09-27T14:23:56'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - -0.065953
+      - 0.442399
+      - 0.129838
+      quat_xyzw:
+      - -0.00357
+      - -0.720714
+      - 0.019581
+      - 0.692946
+    gripper: 0.064087
+    tool: tool0
+  home:
+    joints:
+      elbow_joint: 0.0
+      shoulder_lift_joint: -1.57
+      shoulder_pan_joint: 0.0
+      wrist_1_joint: -1.57
+      wrist_2_joint: 0.0
+      wrist_3_joint: 0.0
+    recorded: '2026-09-25T18:34:46'
+    group: ur_manipulator
+    note: 'Not taught: the workcell SRDF''s `home` state. The arm straight up, clear of the table and
+      every bottle; where each pick starts and ends.'
+  pour:
+    joints:
+      elbow_joint: 1.817618
+      shoulder_lift_joint: -1.393968
+      shoulder_pan_joint: 1.07883
+      wrist_1_joint: -0.424402
+      wrist_2_joint: 1.10908
+      wrist_3_joint: 1.611138
+    recorded: '2026-09-26T15:04:19'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.543608
+      - 0.32001
+      quat_xyzw:
+      - -0.517078
+      - -0.481969
+      - -0.497722
+      - 0.502602
+    gripper: 0.7929
+    tool: tool0
+  pour_gin_15:
+    joints:
+      elbow_joint: 1.920205
+      shoulder_lift_joint: -1.312225
+      shoulder_pan_joint: 1.10556
+      wrist_1_joint: -0.895734
+      wrist_2_joint: 1.15268
+      wrist_3_joint: 1.73851
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.566062
+      - 0.279573
+      quat_xyzw:
+      - -0.447051
+      - -0.41288
+      - -0.556374
+      - 0.565795
+    tool: workcell_gin
+    note: 'Not taught: `pour` turned 15 deg about base +x, about the gin spout (workcell_gin); computed
+      offline, UR5e nominal kinematics.'
+  pour_gin_30:
+    joints:
+      elbow_joint: 1.934984
+      shoulder_lift_joint: -1.167345
+      shoulder_pan_joint: 1.143404
+      wrist_1_joint: -1.326559
+      wrist_2_joint: 1.233286
+      wrist_3_joint: 1.832492
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.598216
+      - 0.246325
+      quat_xyzw:
+      - -0.369376
+      - -0.336726
+      - -0.605506
+      - 0.619306
+    tool: workcell_gin
+    note: 'Not taught: `pour` turned 30 deg about base +x, about the gin spout (workcell_gin); computed
+      offline, UR5e nominal kinematics.'
+  pour_gin_45:
+    joints:
+      elbow_joint: 1.859939
+      shoulder_lift_joint: -0.994873
+      shoulder_pan_joint: 1.184815
+      wrist_1_joint: -1.680703
+      wrist_2_joint: 1.330611
+      wrist_3_joint: 1.888598
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.637881
+      - 0.222533
+      quat_xyzw:
+      - -0.28538
+      - -0.254811
+      - -0.644277
+      - 0.662221
+    tool: workcell_gin
+    note: 'Not taught: `pour` turned 45 deg about base +x, about the gin spout (workcell_gin); computed
+      offline, UR5e nominal kinematics.'
+  pour_gin_60:
+    joints:
+      elbow_joint: 1.7083
+      shoulder_lift_joint: -0.825574
+      shoulder_pan_joint: 1.224236
+      wrist_1_joint: -1.94758
+      wrist_2_joint: 1.429214
+      wrist_3_joint: 1.91259
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.682351
+      - 0.209817
+      quat_xyzw:
+      - -0.196501
+      - -0.168536
+      - -0.672025
+      - 0.693805
+    tool: workcell_gin
+    note: 'Not taught: `pour` turned 60 deg about base +x, about the gin spout (workcell_gin); computed
+      offline, UR5e nominal kinematics.'
+  pour_gin_75:
+    joints:
+      elbow_joint: 1.495296
+      shoulder_lift_joint: -0.670095
+      shoulder_pan_joint: 1.258668
+      wrist_1_joint: -2.137948
+      wrist_2_joint: 1.520315
+      wrist_3_joint: 1.912387
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.728598
+      - 0.209044
+      quat_xyzw:
+      - -0.104261
+      - -0.079377
+      - -0.688274
+      - 0.713518
+    tool: workcell_gin
+    note: 'Not taught: `pour` turned 75 deg about base +x, about the gin spout (workcell_gin); computed
+      offline, UR5e nominal kinematics.'
+  pour_gin_90:
+    joints:
+      elbow_joint: 1.226972
+      shoulder_lift_joint: -0.523847
+      shoulder_pan_joint: 1.287028
+      wrist_1_joint: -2.266097
+      wrist_2_joint: 1.600025
+      wrist_3_joint: 1.894675
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.773469
+      - 0.220267
+      quat_xyzw:
+      - -0.010236
+      - 0.01114
+      - -0.692746
+      - 0.721023
+    tool: workcell_gin
+    note: 'Not taught: `pour` turned 90 deg about base +x, about the gin spout (workcell_gin); computed
+      offline, UR5e nominal kinematics.'
+  pour_vodka_15:
+    joints:
+      elbow_joint: 1.903537
+      shoulder_lift_joint: -1.304419
+      shoulder_pan_joint: 1.110398
+      wrist_1_joint: -0.886265
+      wrist_2_joint: 1.157319
+      wrist_3_joint: 1.73701
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.571061
+      - 0.281557
+      quat_xyzw:
+      - -0.447051
+      - -0.41288
+      - -0.556374
+      - 0.565795
+    tool: workcell_vodka
+    note: 'Not taught: `pour` turned 15 deg about base +x, about the vodka spout (workcell_vodka); computed
+      offline, UR5e nominal kinematics.'
+  pour_vodka_30:
+    joints:
+      elbow_joint: 1.90305
+      shoulder_lift_joint: -1.158873
+      shoulder_pan_joint: 1.150961
+      wrist_1_joint: -1.301707
+      wrist_2_joint: 1.239697
+      wrist_3_joint: 1.828254
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.607532
+      - 0.25152
+      quat_xyzw:
+      - -0.369376
+      - -0.336726
+      - -0.605506
+      - 0.619306
+    tool: workcell_vodka
+    note: 'Not taught: `pour` turned 30 deg about base +x, about the vodka spout (workcell_vodka); computed
+      offline, UR5e nominal kinematics.'
+  pour_vodka_45:
+    joints:
+      elbow_joint: 1.816548
+      shoulder_lift_joint: -0.991272
+      shoulder_pan_joint: 1.193161
+      wrist_1_joint: -1.639444
+      wrist_2_joint: 1.336337
+      wrist_3_joint: 1.882349
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.650534
+      - 0.231946
+      quat_xyzw:
+      - -0.28538
+      - -0.254811
+      - -0.644277
+      - 0.662221
+    tool: workcell_vodka
+    note: 'Not taught: `pour` turned 45 deg about base +x, about the vodka spout (workcell_vodka); computed
+      offline, UR5e nominal kinematics.'
+  pour_vodka_60:
+    joints:
+      elbow_joint: 1.657443
+      shoulder_lift_joint: -0.828077
+      shoulder_pan_joint: 1.232097
+      wrist_1_joint: -1.893253
+      wrist_2_joint: 1.433027
+      wrist_3_joint: 1.905649
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.697137
+      - 0.224168
+      quat_xyzw:
+      - -0.196501
+      - -0.168536
+      - -0.672025
+      - 0.693805
+    tool: workcell_vodka
+    note: 'Not taught: `pour` turned 60 deg about base +x, about the vodka spout (workcell_vodka); computed
+      offline, UR5e nominal kinematics.'
+  pour_vodka_75:
+    joints:
+      elbow_joint: 1.439376
+      shoulder_lift_joint: -0.677223
+      shoulder_pan_joint: 1.265393
+      wrist_1_joint: -2.074578
+      wrist_2_joint: 1.522033
+      wrist_3_joint: 1.905877
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.744166
+      - 0.228717
+      quat_xyzw:
+      - -0.104261
+      - -0.079377
+      - -0.688274
+      - 0.713518
+    tool: workcell_vodka
+    note: 'Not taught: `pour` turned 75 deg about base +x, about the vodka spout (workcell_vodka); computed
+      offline, UR5e nominal kinematics.'
+  pour_vodka_90:
+    joints:
+      elbow_joint: 1.166007
+      shoulder_lift_joint: -0.533083
+      shoulder_pan_joint: 1.292382
+      wrist_1_joint: -2.196052
+      wrist_2_joint: 1.600066
+      wrist_3_joint: 1.88932
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.788414
+      - 0.245283
+      quat_xyzw:
+      - -0.010236
+      - 0.01114
+      - -0.692746
+      - 0.721023
+    tool: workcell_vodka
+    note: 'Not taught: `pour` turned 90 deg about base +x, about the vodka spout (workcell_vodka); computed
+      offline, UR5e nominal kinematics.'
+  pour_whiskey_15:
+    joints:
+      elbow_joint: 1.916309
+      shoulder_lift_joint: -1.309726
+      shoulder_pan_joint: 1.10682
+      wrist_1_joint: -0.894178
+      wrist_2_joint: 1.153888
+      wrist_3_joint: 1.738118
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.567354
+      - 0.279746
+      quat_xyzw:
+      - -0.447051
+      - -0.41288
+      - -0.556374
+      - 0.565795
+    tool: workcell_whiskey
+    note: 'Not taught: `pour` turned 15 deg about base +x, about the whiskey spout (workcell_whiskey);
+      computed offline, UR5e nominal kinematics.'
+  pour_whiskey_30:
+    joints:
+      elbow_joint: 1.92701
+      shoulder_lift_joint: -1.163878
+      shoulder_pan_joint: 1.145456
+      wrist_1_joint: -1.321671
+      wrist_2_joint: 1.235026
+      wrist_3_joint: 1.83134
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.600713
+      - 0.246999
+      quat_xyzw:
+      - -0.369376
+      - -0.336726
+      - -0.605506
+      - 0.619306
+    tool: workcell_whiskey
+    note: 'Not taught: `pour` turned 30 deg about base +x, about the whiskey spout (workcell_whiskey);
+      computed offline, UR5e nominal kinematics.'
+  pour_whiskey_45:
+    joints:
+      elbow_joint: 1.848372
+      shoulder_lift_joint: -0.991885
+      shoulder_pan_joint: 1.18718
+      wrist_1_joint: -1.671702
+      wrist_2_joint: 1.332233
+      wrist_3_joint: 1.886826
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.641411
+      - 0.224003
+      quat_xyzw:
+      - -0.28538
+      - -0.254811
+      - -0.644277
+      - 0.662221
+    tool: workcell_whiskey
+    note: 'Not taught: `pour` turned 45 deg about base +x, about the whiskey spout (workcell_whiskey);
+      computed offline, UR5e nominal kinematics.'
+  pour_whiskey_60:
+    joints:
+      elbow_joint: 1.693801
+      shoulder_lift_joint: -0.823522
+      shoulder_pan_joint: 1.226571
+      wrist_1_joint: -1.934843
+      wrist_2_joint: 1.430346
+      wrist_3_joint: 1.910528
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.686673
+      - 0.212323
+      quat_xyzw:
+      - -0.196501
+      - -0.168536
+      - -0.672025
+      - 0.693805
+    tool: workcell_whiskey
+    note: 'Not taught: `pour` turned 60 deg about base +x, about the whiskey spout (workcell_whiskey);
+      computed offline, UR5e nominal kinematics.'
+  pour_whiskey_75:
+    joints:
+      elbow_joint: 1.47815
+      shoulder_lift_joint: -0.668634
+      shoulder_pan_joint: 1.260781
+      wrist_1_joint: -2.12216
+      wrist_2_joint: 1.520855
+      wrist_3_joint: 1.910342
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.733417
+      - 0.212756
+      quat_xyzw:
+      - -0.104261
+      - -0.079377
+      - -0.688274
+      - 0.713518
+    tool: workcell_whiskey
+    note: 'Not taught: `pour` turned 75 deg about base +x, about the whiskey spout (workcell_whiskey);
+      computed offline, UR5e nominal kinematics.'
+  pour_whiskey_90:
+    joints:
+      elbow_joint: 1.20666
+      shoulder_lift_joint: -0.522168
+      shoulder_pan_joint: 1.288837
+      wrist_1_joint: -2.247517
+      wrist_2_joint: 1.600039
+      wrist_3_joint: 1.892866
+    recorded: '2026-09-26T15:09:32'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - 0.089752
+      - 0.778455
+      - 0.225273
+      quat_xyzw:
+      - -0.010236
+      - 0.01114
+      - -0.692746
+      - 0.721023
+    tool: workcell_whiskey
+    note: 'Not taught: `pour` turned 90 deg about base +x, about the whiskey spout (workcell_whiskey);
+      computed offline, UR5e nominal kinematics.'
+  up_gin:
+    joints:
+      elbow_joint: 0.879489
+      shoulder_lift_joint: -0.822972
+      shoulder_pan_joint: 1.535611
+      wrist_1_joint: -0.040282
+      wrist_2_joint: -0.033837
+      wrist_3_joint: 1.575092
+    recorded: '2026-09-25T20:36:22'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - -0.208933
+      - 0.683378
+      - 0.352311
+      quat_xyzw:
+      - -0.007731
+      - -0.70687
+      - 0.006779
+      - 0.707268
+    gripper: 0.7929
+    tool: tool0
+    note: 'Not taught: up_whsikey moved 255 mm along tool +y (computed offline, UR5e nominal kinematics).'
+  up_vodka:
+    joints:
+      elbow_joint: 1.395394
+      shoulder_lift_joint: -1.14886
+      shoulder_pan_joint: 1.527972
+      wrist_1_joint: -0.233288
+      wrist_2_joint: -0.041476
+      wrist_3_joint: 1.578083
+    recorded: '2026-09-25T20:36:22'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - -0.2091
+      - 0.558405
+      - 0.354876
+      quat_xyzw:
+      - -0.007731
+      - -0.70687
+      - 0.006779
+      - 0.707268
+    gripper: 0.7929
+    tool: tool0
+    note: 'Not taught: up_whsikey moved 130 mm along tool +y (computed offline, UR5e nominal kinematics).'
+  up_whsikey:
+    joints:
+      elbow_joint: 1.779454
+      shoulder_lift_joint: -1.449213
+      shoulder_pan_joint: 1.515211
+      wrist_1_joint: -0.320109
+      wrist_2_joint: -0.054236
+      wrist_3_joint: 1.581201
+    recorded: '2026-09-25T18:45:01'
+    group: ur_manipulator
+    pose:
+      xyz:
+      - -0.209275
+      - 0.428432
+      - 0.357543
+      quat_xyzw:
+      - -0.007731
+      - -0.70687
+      - 0.006779
+      - 0.707268
+    gripper: 0.7929
+    tool: tool0
+pipelines:
+  grab_gin:
+    steps:
+    - goto: approach_grab_gin
+    - grip: 0.02
+      arm: a
+    - goto: grab_gin
+    - grip: 0.5
+      arm: a
+    - goto: up_gin
+    - goto: away_up_gin
+    recorded: '2026-09-25T20:36:22'
+    note: grab_whiskey shifted 255 mm along tool +y
+  grab_vodka:
+    steps:
+    - goto: approach_grab_vodka
+    - grip: 0.02
+      arm: a
+    - goto: grab_vodka
+    - grip: 0.5
+      arm: a
+    - goto: up_vodka
+    - goto: away_up_vodka
+    recorded: '2026-09-25T20:36:22'
+    note: grab_whiskey shifted 130 mm along tool +y
+  grab_whiskey:
+    steps:
+    - goto: aproach_grab_whiskey
+    - grip: 0.02
+      arm: a
+    - goto: grab_whiskey
+    - grip: 0.5
+      arm: a
+    - goto: up_whsikey
+    - goto: away_up_whiskey
+    recorded: '2026-09-25T18:51:09'
+  pour_gin:
+    steps:
+    - movej: pour
+      note: upright over the glass
+    - movel: pour_gin_15
+    - movel: pour_gin_30
+    - movel: pour_gin_45
+    - movel: pour_gin_60
+    - movel: pour_gin_75
+    - movel: pour_gin_90
+    - wait: 3.0
+      note: 'pouring: this sets the amount'
+    - movel: pour_gin_75
+    - movel: pour_gin_60
+    - movel: pour_gin_45
+    - movel: pour_gin_30
+    - movel: pour_gin_15
+    - movel: pour
+      note: upright again
+    recorded: '2026-09-26T15:09:32'
+    note: tilt +90 deg about base +x around the gin spout, pour, tilt back
+  pour_vodka:
+    steps:
+    - movej: pour
+      note: upright over the glass
+    - movel: pour_vodka_15
+    - movel: pour_vodka_30
+    - movel: pour_vodka_45
+    - movel: pour_vodka_60
+    - movel: pour_vodka_75
+    - movel: pour_vodka_90
+    - wait: 3.0
+      note: 'pouring: this sets the amount'
+    - movel: pour_vodka_75
+    - movel: pour_vodka_60
+    - movel: pour_vodka_45
+    - movel: pour_vodka_30
+    - movel: pour_vodka_15
+    - movel: pour
+      note: upright again
+    recorded: '2026-09-26T15:09:32'
+    note: tilt +90 deg about base +x around the vodka spout, pour, tilt back
+  pour_whiskey:
+    steps:
+    - movej: pour
+      note: upright over the glass
+    - movel: pour_whiskey_15
+    - movel: pour_whiskey_30
+    - movel: pour_whiskey_45
+    - movel: pour_whiskey_60
+    - movel: pour_whiskey_75
+    - movel: pour_whiskey_90
+    - wait: 3.0
+      note: 'pouring: this sets the amount'
+    - movel: pour_whiskey_75
+    - movel: pour_whiskey_60
+    - movel: pour_whiskey_45
+    - movel: pour_whiskey_30
+    - movel: pour_whiskey_15
+    - movel: pour
+      note: upright again
+    recorded: '2026-09-26T15:09:32'
+    note: tilt +90 deg about base +x around the whiskey spout, pour, tilt back
+  return_gin:
+    steps:
+    - movej: away_up_gin
+      note: back over the bottle spot, upright
+    - movel: up_gin
+    - movel: grab_gin
+      note: set the bottle down on its mark
+    - grip: 0.02
+      arm: a
+      note: let go
+    - movel: approach_grab_gin
+      note: pull straight back out
+    recorded: '2026-09-26T15:09:32'
+    note: put the gin bottle back where grab_gin took it from
+  return_vodka:
+    steps:
+    - movej: away_up_vodka
+      note: back over the bottle spot, upright
+    - movel: up_vodka
+    - movel: grab_vodka
+      note: set the bottle down on its mark
+    - grip: 0.02
+      arm: a
+      note: let go
+    - movel: approach_grab_vodka
+      note: pull straight back out
+    recorded: '2026-09-26T15:09:32'
+    note: put the vodka bottle back where grab_vodka took it from
+  return_whiskey:
+    steps:
+    - movej: away_up_whiskey
+      note: back over the bottle spot, upright
+    - movel: up_whsikey
+    - movel: grab_whiskey
+      note: set the bottle down on its mark
+    - grip: 0.02
+      arm: a
+      note: let go
+    - movel: aproach_grab_whiskey
+      note: pull straight back out
+    recorded: '2026-09-26T15:09:32'
+    note: put the whiskey bottle back where grab_whiskey took it from

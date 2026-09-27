@@ -85,9 +85,15 @@ PAGE = r"""<!DOCTYPE html>
   }
   .pt { border-top: 1px solid var(--line); padding: 7px 0; }
   .pt:first-of-type { border-top: 0; }
-  .pt .top { display: flex; gap: 6px; align-items: center; }
-  .pt .nm { font-weight: 600; flex: 1; overflow: hidden;
-            text-overflow: ellipsis; white-space: nowrap; }
+  .pt .top { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+  .pt .nm { font-weight: 600; overflow-wrap: anywhere; }
+  .pt .btns { display: flex; gap: 6px; margin-top: 5px; }
+  .pt details { margin-top: 4px; }
+  .pt summary { color: var(--dim); font-size: 12px; cursor: pointer; }
+  .quick { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 6px;
+           align-items: center; margin-bottom: 10px; }
+  .quick .bt { font-weight: 600; text-transform: capitalize; padding-right: 4px; }
+  .quick button { padding: 10px 6px; font-weight: 600; }
   .pt .note { color: var(--dim); font-size: 12px; margin-top: 2px; }
   .empty { color: var(--dim); font-size: 12px; padding: 6px 0; }
   pre#log {
@@ -205,6 +211,9 @@ PAGE = r"""<!DOCTYPE html>
       <button id="gclose" style="flex:1">Close</button>
     </div>
     <div class="row">
+      <button id="ghome" style="flex:1">Home gripper (empty it first)</button>
+    </div>
+    <div class="row">
       <input type="number" id="gpos" value="0.5" step="0.05" min="0.02" max="0.8">
       <button id="gset">Close to</button>
     </div>
@@ -236,6 +245,7 @@ PAGE = r"""<!DOCTYPE html>
 
   <section>
     <h2>Pipelines</h2>
+    <div class="quick" id="quick"></div>
     <div class="row" id="recidle">
       <input type="text" id="plname" placeholder="pipeline name">
       <button class="go" id="rec">Record</button>
@@ -362,6 +372,7 @@ $('#r_resend').onclick = () => run('robot resend');
 });
 $('#gopen').onclick = () => run('open');
 $('#gclose').onclick = () => run('close');
+$('#ghome').onclick = () => run('gripper home');
 $('#gset').onclick = () => run('close ' + Number($('#gpos').value));
 $('#send').onclick = () => {
   const v = $('#cmd').value.trim();
@@ -546,6 +557,7 @@ function paintPipelines(s, dis) {
     ? `Recording "${rec}". Save, Go and the gripper buttons each append a step.`
     : 'Name a pipeline and press Record. What you teach becomes its steps.';
 
+  paintQuick(s, dis);
   $('#pipelines').innerHTML = s.pipelines.length
     ? '' : '<div class="empty">none yet</div>';
   s.pipelines.forEach(p => {
@@ -557,11 +569,12 @@ function paintPipelines(s, dis) {
       ? `<div class="note">missing points: ${esc(p.missing.join(', '))}</div>`
       : '';
     d.innerHTML =
-      `<div class="top"><span class="nm">${esc(p.name)}</span>` +
-      `<span class="note">${p.steps.length} step(s)</span>${live}</div>` +
+      `<div class="top"><span class="nm">${esc(p.name)}</span>${live}</div>` +
       (p.note ? `<div class="note">${esc(p.note)}</div>` : '') + warn +
-      `<div class="note">` +
-      p.steps.map((t, i) => `${i + 1}. ${esc(t)}`).join('<br>') + `</div>`;
+      `<div class="btns"></div>` +
+      `<details><summary>${p.steps.length} step(s)</summary><div class="note">` +
+      p.steps.map((t, i) => `${i + 1}. ${esc(t)}`).join('<br>') +
+      `</div></details>`;
     const go = document.createElement('button');
     go.textContent = 'Run'; go.className = 'go';
     // Never runnable while recording: the replay would be appended to the
@@ -582,8 +595,42 @@ function paintPipelines(s, dis) {
       if (confirm(`Delete pipeline "${p.name}"?`))
         run('pipeline rm ' + JSON.stringify(p.name));
     };
-    d.querySelector('.top').append(go, dry, del);
+    d.querySelector('.btns').append(go, dry, del);
     $('#pipelines').append(d);
+  });
+}
+
+// One row per bottle, for the scripts named <action>_<bottle>: the three a
+// pour is made of, as big buttons, so running one is a single press.
+const QUICK_ACTIONS = ['grab', 'pour', 'return'];
+
+function paintQuick(s, dis) {
+  const byName = Object.fromEntries(s.pipelines.map(p => [p.name, p]));
+  const bottles = [...new Set(s.pipelines
+    .map(p => p.name.match(/^(grab|pour|return)_(.+)$/))
+    .filter(m => m).map(m => m[2]))].sort();
+  const q = $('#quick');
+  q.innerHTML = '';
+  q.hidden = !bottles.length;
+  bottles.forEach(b => {
+    const label = document.createElement('div');
+    label.className = 'bt'; label.textContent = b;
+    q.append(label);
+    QUICK_ACTIONS.forEach(a => {
+      const p = byName[`${a}_${b}`];
+      const btn = document.createElement('button');
+      btn.textContent = a[0].toUpperCase() + a.slice(1);
+      btn.className = 'go';
+      btn.disabled = dis || !!s.recording || !p || p.missing.length > 0;
+      btn.title = !p ? `no ${a}_${b} script`
+        : p.missing.length ? 'missing points: ' + p.missing.join(', ')
+        : `run ${p.name}: ${p.steps.length} step(s)`;
+      btn.onclick = () => {
+        if (confirm(`Run "${p.name}"? ${p.steps.length} step(s), the robot moves.`))
+          run('run ' + JSON.stringify(p.name));
+      };
+      q.append(btn);
+    });
   });
 }
 

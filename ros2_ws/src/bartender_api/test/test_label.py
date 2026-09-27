@@ -11,9 +11,10 @@ sys.path.insert(0, os.path.join(
 
 from bartender_api.drink import label                       # noqa: E402
 
+# The stock in the photos below, not the live config/bottles.yaml.
 INVENTORY = label.load_inventory(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), os.pardir, 'config',
-    'bottles.yaml'))
+    os.path.dirname(os.path.abspath(__file__)), 'data',
+    'photographed_bottles.yaml'))
 
 # PaddleOCR on bottle crops from phone photos, at ocr.SCALE; Żubrówka's label read as noise.
 OCR_TEXT = {
@@ -337,3 +338,15 @@ def test_two_rums_and_no_brand_is_type_only_without_a_brand():
 def test_one_tequila_and_no_brand_is_that_tequila():
     got = label.read_label('crop', WIDE_BAR, _ocr('100% AGAVE TEQUILA'))
     assert (got.brand, got.confidence) == ('Jose Cuervo', label.TYPE_ONLY_CONFIDENCE)
+
+
+def test_the_shipped_stock_has_the_workcell_bottles():
+    shipped = label.load_inventory(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), os.pardir, 'config',
+        'bottles.yaml'))
+    assert {'whiskey', 'vodka', 'jager'} <= {row.type for row in shipped}
+
+
+@pytest.mark.parametrize('text', ['JÄGERMEISTER 35% vol 0,7L', 'Jaegermeister'])
+def test_a_jagermeister_label_reads_as_jager(text):
+    assert label.parse(text)['type'] == 'jager'

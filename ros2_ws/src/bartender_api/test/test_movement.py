@@ -382,4 +382,4 @@ def test_the_shipped_workcell_menu_loads_and_uses_only_its_six_bottles():
     drinks = menu.load(path)
     assert 'whiskey_cola' in drinks
     names = {s.split('_', 1)[1] for d in drinks.values() for s in d.scripts}
-    assert names <= {'gin', 'sprite', 'cola', 'fanta', 'whiskey', 'vodka'}
+    assert names <= {'jager', 'sprite', 'cola', 'fanta', 'whiskey', 'vodka'}

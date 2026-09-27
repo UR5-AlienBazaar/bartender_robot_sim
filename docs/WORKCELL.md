@@ -291,7 +291,7 @@ with `--file workcell`** so that its points go in
 the same joint names as the simulation, so a point taught in sim can be
 replayed on the real arm. Always replay it slowly the first time.
 
-### Teaching the bottles (whiskey, vodka, gin)
+### Teaching the bottles (whiskey, vodka, jager)
 
 ```bash
 ros2 run bartender_teach teach_gui --file workcell    # or: teach --file workcell
@@ -309,11 +309,12 @@ these are a suggestion:
 | `<bottle>_grasp` | Fingers around the bottle, just below its shoulder |
 | `<bottle>_lift` | The same, 50 mm higher |
 
-`<bottle>` is `whiskey`, `vodka` or `gin`. Stand the three bottles where
+`<bottle>` is `whiskey`, `vodka` or `jager` (Jägermeister, which replaced
+gin on 2026-09-27). Stand the three bottles where
 they will always stand, and mark the spots on the table: a taught grasp is
 only right while the bottle is back on its mark.
 
-For each bottle (whiskey shown; repeat with `vodka` and `gin`):
+For each bottle (whiskey shown; repeat with `vodka` and `jager`):
 
 ```
 teach[a]> speed 15
@@ -403,7 +404,7 @@ teach[a]> tool tool0         # back to the flange
 |---|---|
 | `workcell_whiskey` | 70 mm up, 20 mm further along tz |
 | `workcell_vodka` | 85 mm up, 15 mm further along tz |
-| `workcell_gin` | 65 mm up, 20 mm further along tz |
+| `workcell_jager` | 65 mm up, 20 mm further along tz (**not measured**: the gin bottle's numbers) |
 
 The grip point is 145 mm in front of the flange along tz. The measurements
 are `WORKCELL_SPOUT` in
@@ -412,34 +413,95 @@ translation jogs and saved points are unaffected.
 
 ### Pouring and putting the bottle back
 
-Each bottle has two more scripts, which run after `grab_<bottle>`:
+Whiskey and jager each have three scripts (2026-09-27), built from the taught
+`aproach_<b>`, `grab_<b>`, `up_<b>`, `back_<b>` and `glass` points:
 
 | Script | Does |
 |---|---|
-| `pour_<bottle>` | `movej` to `pour` (bottle upright over the glass), tilt +90° about base +x around that bottle's spout in six 15° `movel` steps, wait 3 s, tilt back the same way to `pour` |
-| `return_<bottle>` | `movej` back over the bottle's spot, `movel` down onto its mark, open the gripper, `movel` straight back out to the approach point |
+| `grab_<b>` | `gripper home` (gripper empty), open, `goto aproach_<b>`, `movel grab_<b>`, close until it grips, `movel up_<b>`, `movel back_<b>` |
+| `pour_<b>` | `movej glass` (bottle upright), roll +90° about tool +z (the gripper's pointing axis) around the bottle TCP in six 15° `movel` steps, wait 3 s, tilt back to `glass`, still holding the bottle |
+| `return_<b>` | `movej back_<b>`, `movel up_<b>`, `movel grab_<b>`, open, `movel aproach_<b>` |
 
-So one bottle is `run grab_whiskey`, `run pour_whiskey`,
-`run return_whiskey`. These are the scripts the drinks menu runs for the
-spirit.
+So one pour is `run grab_whiskey`, `run pour_whiskey`, `run return_whiskey`,
+which is also what the drinks menu runs for the spirit.
 
-- **`pour` is the one taught point.** The tilt points
-  (`pour_<bottle>_15` … `_90`) are computed from it with the spout tool, so
-  the spout stays in the same place during the whole tilt. **Re-teach `pour`
-  and they must be recomputed.**
-- **Which way it tips:** at `pour` the bottle is held out along +y. +90°
-  about +x lays it on its side with the neck pointing toward −y, back
-  toward the arm, and the spout stays where it was. If it should tip the
-  other way, it needs recomputing with −90°.
-- **How much it pours** is the `wait: 3.0` step in `pour_<bottle>` in
-  `workcell_points.yaml`. Edit it there.
-- **Getting to `pour` uses `movej`, not `movel`.** `movej` keeps an open
-  bottle within about 2° of upright on the way. A `movel` from the whiskey
-  lift point would turn the wrist over halfway.
-- Only `pour` and the whiskey points were taught on the robot. The tilt
-  points and every vodka and gin point were computed offline and have run
-  only on the mock arm so far. Run them slowly the first time, with an empty
+- **The bottle TCP is `workcell_bottle`**, the same for every bottle: 145 mm
+  up (tool0 +X) and 162 mm ahead, horizontally (tool0 +Z), from tool0 in the
+  side grasp. `WORKCELL_BOTTLE_TCP` in
+  [`tool_frames.py`](../ros2_ws/src/bartender_teach/bartender_teach/tool_frames.py).
+  The moves up to `glass` use the normal TCP (tool0).
+- **The tilt points `glass_tilt_15` … `_90` are computed from `glass`**, so
+  the spout stays in the same place during the whole tilt. Both bottles
+  share them. **Re-teach `glass` and they must be recomputed.** After the
+  file is edited outside the pendant, `reload` on the pendant re-reads it
+  (otherwise its next save would undo the edit).
+- **Which way it tips:** sideways, a roll about tool +z. Seen from the
+  robot base looking at the glass, the neck tips to the RIGHT (base +x).
+  Only wrist 3 turns much, 15° a step. (Tipping about tool y laid the neck
+  back toward the arm, which was wrong; −z tips it to the left.)
+- **How much it pours** is the `wait: 3.0` step in `pour_<b>` in
+  `workcell_points.yaml`.
+- **Getting to `glass` uses `movej`**: from `back_<b>` it keeps the bottle
+  within about 3° of upright.
+- The tilt points were computed offline (UR5e nominal kinematics) and have
+  not run on the real arm yet. Run them slowly the first time, with an empty
   bottle.
+
+### The gripper (MAB motor on the Pi)
+
+The real gripper is a custom one, driven by one MAB motor (CAN ID 779)
+connected to the Raspberry Pi at 10.42.0.200. Start its node on the Pi:
+
+```bash
+ssh bartender@10.42.0.200
+cd ~/pi_code && ./run_arm.sh --ros-args -p "can_ids:=[779]"   # log: ~/mab_arm.log
+```
+
+The teach pendant (`teach`, `teach_gui`) and the API then use it by
+themselves, but only after it has been **homed**. The fingers have no end
+stop on the open side, and the drive's position shifts when it loses power,
+so nothing is a fixed motor position: everything is measured from the
+closed stop.
+
+1. Empty the gripper.
+2. `gripper home` on the pendant (or the **Home gripper** button). It
+   closes the gripper until it stalls on its stop and stores that position
+   in `~/.ros/bartender_mab_gripper.yaml`, which the pendant and the API
+   share.
+3. Home again whenever the Pi or the drive has been off. `open` refuses
+   until it has been homed, and when the gripper reads below the stored
+   stop (a sign its position has shifted).
+
+Then `open` opens to 2.3 rad above the stop (the full stroke is about 2.4),
+and `close` or any `grip` step aims 0.2 below the stop, so it closes until
+the fingers stall, on the bottle or on the stop, pushing with up to the
+drive's `maxTorque` of 3 Nm (enough to hold a bottle, not enough to crack
+the glass). There are no in-between positions. After the stall `candletool`
+switches the drive off, so the fingers stay put but are no longer pushed.
+Each command waits 2 s for the fingers. To force a choice:
+`--gripper mab` or `--gripper robotiq` (the simulated one).
+
+Only give `can_ids:=[779]`: with the default two motors the node ignores
+one-value commands, and polling the missing motor crashes `candletool`.
+
+**Drive gains (2026-09-27).** With the drive's stock gains, closing
+stopped partway (for example 2.79 → 2.62): near the target the velocity
+loop pushed with only about 0.45 Nm, far below the 7 Nm `maxTorque`. The
+gains were raised on the drive (`candletool md -i 779 register write ...`,
+then `candletool md -i 779 save`):
+
+| Register | Stock | Now |
+|---|---|---|
+| `motorVelPidKp` | 0.1 | 0.2 |
+| `motorVelPidWindup` | 0.25 | 1.5 |
+| `motorPosPidKp` | 10.5 | 15 |
+| `maxTorque` | 7 | 3 (grip force: holds a bottle, does not crack it) |
+
+If it buzzes or oscillates, lower `motorVelPidKp` first. `config download`
+crashes in candletool 1.5.0, so this table is the record of the old values.
+The drive still carries the `MA-p-45-10_KV75` motor profile; the motor is
+an MA-p-40-10. The open travel and the homing sweep are in
+[`mab_gripper.py`](../ros2_ws/src/bartender_teach/bartender_teach/mab_gripper.py).
 
 ### Picking a bottle through the API
 
@@ -466,7 +528,7 @@ curl -X POST http://127.0.0.1:8090/pick \
   when the pipeline has finished or stopped. The HTTP status is 200 if every
   step worked and 409 if not; `message` says which step stopped and why.
 - A bottle nobody has taught gets a 409 that lists the bottles that do
-  exist. **To add vodka or gin, teach `grab_vodka` / `grab_gin` on the
+  exist. **To add a bottle, teach `grab_vodka` / `grab_jager` on the
   pendant.** The server re-reads the point file on every request, so there
   is nothing to restart and no code to change.
 - One command at a time: a `/pick` while another move is running is
@@ -479,7 +541,7 @@ curl -X POST http://127.0.0.1:8090/pick \
 
 A drink is one API call that runs a list of scripts, in order. The menu is
 [`bartender_teach/config/workcell_menu.yaml`](../ros2_ws/src/bartender_teach/config/workcell_menu.yaml):
-whiskey, gin and vodka, each with cola, sprite or fanta. Each drink runs
+whiskey, jager and vodka, each with cola, sprite or fanta. Each drink runs
 three scripts per ingredient, which are yours to teach:
 
 | Script | Does |
@@ -488,9 +550,9 @@ three scripts per ingredient, which are yours to teach:
 | `pour_<x>` | Pour it into the glass |
 | `return_<x>` | Put it back on its spot |
 
-`<x>` is `whiskey`, `gin`, `vodka`, `cola`, `sprite` or `fanta`. Only
-`grab_whiskey` exists so far, so every drink is "not ready" until its
-scripts are taught. The server reads the menu with `--points workcell`.
+`<x>` is `whiskey`, `jager`, `vodka`, `cola`, `sprite` or `fanta`. A
+drink is "not ready" until all of its scripts and their points are
+taught. The server reads the menu with `--points workcell`.
 
 ```bash
 curl http://127.0.0.1:8090/drinks
@@ -544,7 +606,7 @@ ros2 service call /dashboard_client/stop         std_srvs/srv/Trigger
 | `jog x`: "only 0.00 of the path was reachable" | The arm is straight up. Joint-jog it into a bend first. |
 | Move refused, log mentions `workcell_table` | The move would hit the table. If the table is clearly not in the way, `arm_yaw` or `table_height` is wrong. |
 | MoveIt says success but the arm does not move | The speed slider is at 0%, or the program is paused on the pendant. |
-| Gripper "closes" but nothing happens | Expected: it is simulated until `gripper_fake_hardware:=false`. |
+| Gripper "closes" but nothing happens | Is `run_arm.sh` running on the Pi? Without it, the pendant falls back to the simulated Robotiq. See "The gripper". |
 | `package 'ur_robot_driver' not found` | Step 1. |
 
 ## All launch arguments

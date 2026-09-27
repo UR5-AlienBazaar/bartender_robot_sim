@@ -209,8 +209,16 @@ def bottle_spout(bottle):
 WORKCELL_SPOUT = {           # bottle: (up, ahead) in metres
     'whiskey': (0.070, 0.020),
     'vodka': (0.085, 0.015),
-    'gin': (0.065, 0.020),
+    # Not measured yet: the gin bottle's numbers, which the Jagermeister
+    # bottle replaced on 2026-09-27. Measure it.
+    'jager': (0.065, 0.020),
 }
+
+
+# One bottle TCP for every workcell bottle, measured by the user on
+# 2026-09-27 from tool0 in the side grasp: 145 mm up (tool0 +X) and 162 mm
+# ahead, horizontally (tool0 +Z). The pour tilts turn about it.
+WORKCELL_BOTTLE_TCP = (0.145, 0.0, 0.162)
 
 
 def workcell_spout(bottle, grip_ahead=SIDE_GRIP_AHEAD_OF_TOOL0):
@@ -230,6 +238,10 @@ TOOLS = {
     'whiskey_spout': bottle_spout('whiskey'),
     'cola_spout': bottle_spout('cola'),
     **{f'workcell_{b}': workcell_spout(b) for b in WORKCELL_SPOUT},
+    'workcell_bottle': Tool(
+        'workcell_bottle', WORKCELL_BOTTLE_TCP, IDENTITY,
+        'workcell: any bottle in the side grasp, 145mm up and 162mm along '
+        'tz from tool0'),
 }
 
 

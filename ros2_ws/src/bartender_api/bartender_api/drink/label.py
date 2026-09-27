@@ -38,6 +38,7 @@ TYPE_READ_CONFIDENCE = 0.4
 # Order matters: the first type whose pattern matches wins.
 TYPE_WORDS = {
     'whiskey': r'whiske?y|bourbon|scotch',
+    'jager': r'j(a|ae)germeister|\bj(a|ae)ger\b',
     'gin': r'\bgin\b|ジン',
     'vodka': r'vodka|wodka',
     'rum': r'\brum\b|\bron\b|\brhum\b',

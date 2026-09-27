@@ -11,6 +11,8 @@ import os
 import sys
 import types
 
+import logging
+
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -162,6 +164,46 @@ class FakeNode:
         self.arms_gripped = getattr(self, 'arms_gripped', [])
         self.arms_gripped.append(arm.key)
         return True, ''
+
+
+def _bare_teach_node():
+    """Make a TeachNode with only its joint-state cache, no ROS behind it."""
+    import threading
+    node = TeachNode.__new__(TeachNode)
+    node._positions, node._velocities = {}, {}
+    node._state_lock = threading.Lock()
+    node._have_state = threading.Event()
+    node._mab_updates = 0
+    return node
+
+
+def test_a_gripper_only_joint_state_does_not_hide_the_arm():
+    """The Pi's MAB node publishes /joint_states with only its motors.
+
+    Keeping just the last message made the arm vanish whenever that one
+    arrived last, and every move failed with "not publishing
+    shoulder_pan_joint".
+    """
+    from sensor_msgs.msg import JointState
+    node = _bare_teach_node()
+    node._on_joint_state(JointState(
+        name=list(ARM_JOINTS), position=list(SAMPLE.values()),
+        velocity=[0.0] * 6))
+    node._on_joint_state(JointState(name=['joint779'], position=[0.45]))
+    assert node.arm_joints(ARM_A) == pytest.approx(SAMPLE)
+    assert node.joints()['joint779'] == 0.45
+
+
+def test_the_arm_is_settled_only_when_its_own_velocities_say_so():
+    from sensor_msgs.msg import JointState
+    node = _bare_teach_node()
+    node._on_joint_state(JointState(
+        name=list(ARM_JOINTS), position=[0.0] * 6, velocity=[0.0] * 6))
+    # A gripper message with no velocities must not count as "unknown".
+    node._on_joint_state(JointState(name=['joint779'], position=[0.45]))
+    with node._state_lock:
+        speeds = [node._velocities.get(j) for j in ARM_JOINTS]
+    assert None not in speeds and max(speeds) == 0.0
 
 
 @pytest.fixture
@@ -1019,3 +1061,143 @@ def test_motion_in_the_simulation_is_not_held_up_by_robot_status(tmp_path):
 def test_robot_resend(pendant):
     pendant.dispatch('robot resend')
     assert pendant.node.robot.calls == [('resend',)]
+
+
+# -- the workcell's MAB gripper ---------------------------------------------
+
+def test_mab_gripper_only_opens_or_closes_fully():
+    """Scripts say 0.02 for open and 0.5 or 0.8 for a grip, in Robotiq rad."""
+    from bartender_teach import mab_gripper as mab
+    ref = 0.4
+    assert mab.motor_from_knuckle(0.02, ref) == pytest.approx(ref + mab.OPEN_TRAVEL)
+    assert mab.motor_from_knuckle(0.5, ref) == pytest.approx(ref - mab.CLOSE_PAST)
+    assert mab.motor_from_knuckle(0.8, ref) == pytest.approx(ref - mab.CLOSE_PAST)
+
+
+def test_mab_gripper_opens_short_of_its_full_stroke():
+    """No end stop on the open side: opening must stop inside the ~2.4 rad."""
+    from bartender_teach import mab_gripper as mab
+    assert 0 < mab.OPEN_TRAVEL < 2.4
+    assert mab.HOME_SWEEP > 2.4
+
+
+def test_mab_position_reads_back_as_a_knuckle_value():
+    from bartender_teach import mab_gripper as mab
+    ref = 0.4
+    assert mab.knuckle_from_motor(ref + mab.OPEN_TRAVEL, ref) == pytest.approx(0.02)
+    assert mab.knuckle_from_motor(ref, ref) == pytest.approx(0.8)
+    assert mab.knuckle_from_motor(99.0, ref) == pytest.approx(0.02)
+
+
+class _FakeMabPub:
+    def __init__(self):
+        self.sent = []
+
+    def get_subscription_count(self):
+        return 1
+
+    def publish(self, msg):
+        self.sent.append(list(msg.data))
+
+
+@pytest.fixture
+def mab_node(tmp_path, monkeypatch):
+    from bartender_teach import mab_gripper as mab
+    monkeypatch.setattr(mab, 'REF_FILE', str(tmp_path / 'ref.yaml'))
+    monkeypatch.setattr(mab, 'MOVE_WAIT_S', 0.0)
+    node = _bare_teach_node()
+    node._mab_pub = _FakeMabPub()
+    node.get_logger = lambda: logging.getLogger('teach_test')
+    return node
+
+
+def test_mab_gripper_will_not_open_before_it_is_homed(mab_node):
+    ok, why = mab_node._command_mab(0.02)
+    assert not ok and 'gripper home' in why
+    assert mab_node._mab_pub.sent == []
+
+
+def test_mab_gripper_opens_and_closes_from_its_closed_stop(mab_node):
+    from bartender_teach import mab_gripper as mab
+    mab.save_ref(1.0)
+    assert mab_node._command_mab(0.02) == (True, '')
+    assert mab_node._command_mab(0.5) == (True, '')
+    assert mab_node._mab_pub.sent == [
+        [pytest.approx(1.0 + mab.OPEN_TRAVEL)], [pytest.approx(1.0 - mab.CLOSE_PAST)]]
+
+
+def test_mab_gripper_will_not_open_when_its_position_has_shifted(mab_node):
+    """A reading below the closed stop means the stored stop is stale."""
+    from sensor_msgs.msg import JointState
+    from bartender_teach import mab_gripper as mab
+    mab.save_ref(1.0)
+    mab_node._on_joint_state(JointState(name=['joint779'], position=[0.3]))
+    ok, why = mab_node._command_mab(0.02)
+    assert not ok and 'shifted' in why
+    assert mab_node._mab_pub.sent == []
+
+
+def _feed(node, readings):
+    it = iter(readings)
+    node._fresh_mab_position = lambda timeout: next(it, None)
+
+
+@pytest.fixture
+def fast_homing(monkeypatch):
+    from bartender_teach import teach_points
+    monkeypatch.setattr(teach_points, 'MAB_SETTLE_WINDOW_S', 0.0)
+    monkeypatch.setattr(teach_points, 'MAB_HOME_TIMEOUT_S', 1.0)
+
+
+def test_homing_closes_past_the_stop_and_stores_where_it_stalled(mab_node, fast_homing):
+    from bartender_teach import mab_gripper as mab
+    _feed(mab_node, [2.5, 2.5, 0.9, 0.41, 0.405])
+    ok, why = mab_node.home_mab_gripper()
+    assert ok, why
+    assert mab_node._mab_pub.sent == [[pytest.approx(2.5 - mab.HOME_SWEEP)]]
+    assert mab.load_ref() == pytest.approx(0.405)
+
+
+def test_homing_waits_for_the_gripper_to_be_at_rest_before_it_aims(mab_node, fast_homing):
+    """A reading from the middle of a move would put the target in the wrong place."""
+    from bartender_teach import mab_gripper as mab
+    _feed(mab_node, [1.0, 1.6, 2.2, 2.2, 0.5, 0.49])
+    assert mab_node.home_mab_gripper()[0]
+    assert mab_node._mab_pub.sent[0] == [pytest.approx(2.2 - mab.HOME_SWEEP)]
+
+
+def test_homing_that_opens_instead_stops_and_stores_nothing(mab_node, fast_homing):
+    from bartender_teach import mab_gripper as mab
+    _feed(mab_node, [0.4, 0.4, 0.5, 0.9])
+    ok, why = mab_node.home_mab_gripper()
+    assert not ok and 'OPEN way' in why
+    # Stopped where it was: the last command is its own position.
+    assert mab_node._mab_pub.sent[-1] == [pytest.approx(0.9)]
+    assert mab.load_ref() is None
+
+
+def test_mab_gripper_will_not_close_when_its_position_has_shifted(mab_node):
+    from sensor_msgs.msg import JointState
+    from bartender_teach import mab_gripper as mab
+    mab.save_ref(-4.55)
+    mab_node._on_joint_state(JointState(name=['joint779'], position=[1.0]))
+    ok, why = mab_node._command_mab(0.5)
+    assert not ok and 'shifted' in why
+    assert mab_node._mab_pub.sent == []
+
+
+def test_a_joint_state_with_the_gripper_counts_as_a_fresh_reading(mab_node):
+    import threading
+    from sensor_msgs.msg import JointState
+    timer = threading.Timer(0.1, mab_node._on_joint_state,
+                            [JointState(name=['joint779'], position=[1.23])])
+    timer.start()
+    assert mab_node._fresh_mab_position(2.0) == pytest.approx(1.23)
+
+
+def test_a_pipeline_gripper_home_step_homes_the_gripper(pendant):
+    from bartender_teach.pipelines import Step
+    calls = []
+    pendant.node.home_mab_gripper = lambda: calls.append('home') or (True, 'ok')
+    assert pendant._execute(Step('gripper', 'home')) == (True, 'ok')
+    assert calls == ['home']

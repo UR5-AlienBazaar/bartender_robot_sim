@@ -102,6 +102,11 @@ class TwinMirror(Node):
         self.get_logger().info(f'mirroring {source} -> {target} at {rate:g} Hz')
 
     def _on_state(self, msg):
+        # /joint_states also carries the Pi's MAB gripper motors, in messages
+        # of their own. Those say nothing about the arm, so they must not
+        # replace the last arm message (the twin would stutter).
+        if not any(j in msg.name for j in ARM_JOINTS):
+            return
         self._latest = msg
         self._latest_time = self.get_clock().now()
 

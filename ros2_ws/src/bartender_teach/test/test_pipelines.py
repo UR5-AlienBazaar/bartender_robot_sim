@@ -28,7 +28,7 @@ SAMPLE = dict(zip(ARM, [0.079, -1.905, 2.337, -0.432, 1.65, 0.0]))
 
 def test_the_kinds_are_the_ones_the_pendant_runs():
     """If a kind is added here without an executor, a file can outrun it."""
-    assert STEP_KINDS == ('goto', 'movej', 'movel', 'grip', 'wait')
+    assert STEP_KINDS == ('goto', 'movej', 'movel', 'grip', 'wait', 'gripper')
 
 
 @pytest.mark.parametrize('kind', ['movej', 'movel'])
@@ -239,3 +239,15 @@ def test_a_bad_step_is_reported_with_its_position():
                            'points.yaml')
     message = str(exc.value)
     assert 'step 2' in message and 'pour' in message
+
+
+def test_a_gripper_home_step_round_trips():
+    step = Step.from_dict({'gripper': 'home', 'note': 'empty first'})
+    assert (step.kind, step.arg) == ('gripper', 'home')
+    assert step.describe() == 'gripper home  -- empty first'
+    assert Step.from_dict(step.to_dict()) == step
+
+
+def test_a_gripper_step_only_knows_home():
+    with pytest.raises(PipelineError):
+        Step('gripper', 'open')

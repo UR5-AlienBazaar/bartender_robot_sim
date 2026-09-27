@@ -57,7 +57,11 @@ import datetime
 # What a step may be, and what its argument means. Adding a kind means adding
 # it here, giving it a validator, and teaching Pendant how to execute it --
 # in that order, so a file can never name a step the pendant cannot run.
-STEP_KINDS = ('goto', 'movej', 'movel', 'grip', 'wait')
+STEP_KINDS = ('goto', 'movej', 'movel', 'grip', 'wait', 'gripper')
+
+# `gripper: home` -- the workcell's MAB gripper finds its closed stop (see
+# bartender_teach/mab_gripper.py). The only gripper action there is.
+GRIPPER_ACTIONS = ('home',)
 
 # The step kinds that drive to a named point. Their argument is a point name.
 MOVE_KINDS = ('goto', 'movej', 'movel')
@@ -123,6 +127,13 @@ class Step:
             if not name:
                 raise PipelineError(f'a {kind} step needs a point name')
             return name
+        if kind == 'gripper':
+            action = str(arg or '').strip().lower()
+            if action not in GRIPPER_ACTIONS:
+                raise PipelineError(
+                    f'a gripper step is one of {", ".join(GRIPPER_ACTIONS)}, '
+                    f'got {arg!r}')
+            return action
         # bool is an int in Python and `grip: true` is a plausible thing to
         # type into a YAML file; it would otherwise arrive here as 1.0 rad.
         if isinstance(arg, bool) or not isinstance(arg, (int, float)):
@@ -154,12 +165,14 @@ class Step:
             body = f'grip {self.arg:.3f}'
             if self.arm:
                 body += f' (arm {self.arm})'
+        elif self.kind == 'gripper':
+            body = f'gripper {self.arg}'
         else:
             body = f'wait {self.arg:g}s'
         return f'{body}  -- {self.note}' if self.note else body
 
     def to_dict(self):
-        arg = (self.arg if self.kind in MOVE_KINDS
+        arg = (self.arg if self.kind in MOVE_KINDS or self.kind == 'gripper'
                else round(float(self.arg), 6))
         d = {self.kind: arg}
         if self.arm:

@@ -74,7 +74,7 @@ always `"a"`.
 ```json
 {
   "bottles": [
-    {"bottle": "gin",     "pipeline": "grab_gin",     "steps": 6},
+    {"bottle": "jager",   "pipeline": "grab_jager",   "steps": 6},
     {"bottle": "vodka",   "pipeline": "grab_vodka",   "steps": 6},
     {"bottle": "whiskey", "pipeline": "grab_whiskey", "steps": 6}
   ],
@@ -122,8 +122,8 @@ least 60 s before your client times out.
 - `missing_scripts` and `missing_points` list what is still to teach.
 - Use `name` for display and `drink` for the request.
 
-The menu has seven drinks: `whiskey_cola`, `whiskey_sprite`, `gin_sprite`,
-`gin_fanta`, `vodka_cola`, `vodka_sprite` and `vodka_fanta`. Each runs
+The menu has seven drinks: `whiskey_cola`, `whiskey_sprite`, `jager_sprite`,
+`jager_fanta`, `vodka_cola`, `vodka_sprite` and `vodka_fanta`. Each runs
 `grab_`, `pour_` and `return_` for its spirit, then the same three for its
 mixer. To change a drink or add one, edit
 [`workcell_menu.yaml`](../ros2_ws/src/bartender_teach/config/workcell_menu.yaml).

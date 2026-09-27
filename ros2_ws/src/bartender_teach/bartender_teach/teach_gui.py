@@ -117,7 +117,7 @@ class Bridge:
             # even when it equals the flange -- the page then never has to
             # know which case it is in.
             'tip': None if tip is None else list(tip[0]),
-            'gripper': joints.get(selected.gripper_joint),
+            'gripper': self.node.gripper_position(selected),
             # The real robot's mode, program and speed; 'real' is False in
             # the simulation and the page hides the panel's status then.
             'robot': self.node.robot.status(),
@@ -234,6 +234,10 @@ def main(args=None):
                              'config/workcell_points.yaml (default: the '
                              'shipped taught_points.yaml)')
     # ros2 run passes --ros-args through; argparse must not choke on it.
+    parser.add_argument('--gripper', choices=('auto', 'robotiq', 'mab'),
+                        default='auto',
+                        help='mab: the workcell\'s custom gripper on the Pi '
+                             '(bartender_teach/mab_gripper.py)')
     opts, _ = parser.parse_known_args(sys.argv[1:] if args is None else args)
 
     path = points_path_for(opts.file)
@@ -246,7 +250,7 @@ def main(args=None):
         return 1
 
     rclpy.init(args=None)
-    node = TeachNode(cache_pose=True)
+    node = TeachNode(cache_pose=True, gripper=opts.gripper)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
     threading.Thread(target=executor.spin, daemon=True).start()

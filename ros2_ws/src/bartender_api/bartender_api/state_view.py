@@ -31,6 +31,6 @@ def build(node):
             'pose': None if pose is None else {
                 'xyz': list(pose[0]), 'quat_xyzw': list(pose[1]),
             },
-            'gripper': joints.get(arm.gripper_joint),
+            'gripper': node.gripper_position(arm),
         })
     return {'arms': arms}
