@@ -13,6 +13,8 @@
     GET  /drinks     the menu, and which drinks have all their scripts taught
     POST /make       {"drink": "whiskey_cola"}  -- run that drink's scripts
     POST /ask        {"text": "a whiskey coke please"}  -- which call that is (Jev; runs nothing)
+    POST /arm/move   {"joints": [0.5]}  -- absolute radians on the rpi4 arm
+    GET  /arm/state                   joint positions of the rpi4 arm
 
 Phase B (world/state/can) is read-only, no motion, no new risk. The three
 movement routes are Phase C, scoped down to "simple movement" -- see
@@ -36,6 +38,7 @@ warning every time.
 """
 import argparse
 import json
+import math
 import os
 import sys
 import threading
@@ -59,7 +62,7 @@ from bartender_teach.point_store import (
 from bartender_teach.teach_points import TeachNode
 
 from .drink import jev, label, ocr, vlm
-from . import feasibility, intent, menu, movement, perception, state_view, world
+from . import feasibility, intent, menu, movement, perception, pi_arm, state_view, world
 
 # Same topic, same QoS, same reasoning as open_action_server's _on_poses:
 # depth 1 and best-effort, because a queued backlog is a lie about where
@@ -244,7 +247,8 @@ def make_observer(depth_cache, calib):
 
 
 def make_handler(pose_cache, teach_node, move_bridge, observe=None,
-                 mode='ground_truth', see_label=None, ask_jev=None):
+                 mode='ground_truth', see_label=None, ask_jev=None,
+                 pi_arm=None):
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
@@ -284,6 +288,8 @@ def make_handler(pose_cache, teach_node, move_bridge, observe=None,
                 self._send(200, move_bridge.bottles())
             elif path == '/drinks':
                 self._send(200, move_bridge.drinks())
+            elif path == '/arm/state':
+                self._do_arm_state()
             else:
                 self._send(404, {'error': 'not found'})
 
@@ -309,6 +315,8 @@ def make_handler(pose_cache, teach_node, move_bridge, observe=None,
                 self._send(200 if result['ok'] else 409, result)
             elif path == '/ask':
                 self._do_ask(body)
+            elif path == '/arm/move':
+                self._do_arm_move(body)
             else:
                 self._send(404, {'error': 'not found'})
 
@@ -342,6 +350,29 @@ def make_handler(pose_cache, teach_node, move_bridge, observe=None,
                 return
             result = getattr(move_bridge, kind)(arm, *fields)
             self._send(200 if result['ok'] else 409, result)
+
+        def _do_arm_state(self):
+            if pi_arm is None:
+                self._send(503, {'error': 'arm route off: pass --pi-arm URL '
+                                          '(see bartender_api --help)'})
+                return
+            result = pi_arm.state()
+            self._send(200 if result.get('ok') else 502, result)
+
+        def _do_arm_move(self, body):
+            if pi_arm is None:
+                self._send(503, {'error': 'arm route off: pass --pi-arm URL '
+                                          '(see bartender_api --help)'})
+                return
+            joints = body.get('joints')
+            if (not isinstance(joints, list) or not 1 <= len(joints) <= 6
+                    or not all(isinstance(j, (int, float))
+                               and math.isfinite(j) for j in joints)):
+                self._send(400, {'error': 'joints must be 1-6 finite '
+                                          'numbers (absolute radians)'})
+                return
+            result = pi_arm.move(joints)
+            self._send(200 if result.get('ok') else 502, result)
 
         def log_message(self, fmt, *args):
             """Silence per-request logging; a poller would bury real output."""
@@ -407,6 +438,11 @@ def main(args=None):
                              '`workcell` for bartender_teach/config/'
                              'workcell_menu.yaml (default: the --points '
                              'name, when that is a bare name)')
+    parser.add_argument('--pi-arm', default='http://10.42.0.200:8092',
+                        help='base URL of the rpi4 arm bridge '
+                             '(arm_http_bridge.py, started by run_arm.sh '
+                             'on the Pi). Empty string disables the '
+                             '/arm/* routes.')
     # ros2 run passes --ros-args through; argparse must not choke on it.
     opts, _ = parser.parse_known_args(sys.argv[1:] if args is None else args)
 
@@ -460,12 +496,14 @@ def main(args=None):
     menu_path = menu.menu_path_for(menu_arg)
     move_bridge = movement.MovementBridge(teach_node, store, menu_path)
     ask_jev = jev.make_asker()
+    pi_arm_client = pi_arm.PiArm(opts.pi_arm) if opts.pi_arm else None
 
     try:
         server = ThreadingHTTPServer(
             (opts.host, opts.port),
             make_handler(pose_cache, teach_node, move_bridge, observe,
-                         opts.perception, see_label, ask_jev))
+                         opts.perception, see_label, ask_jev,
+                         pi_arm_client))
     except OSError as exc:
         print(f'cannot bind {opts.host}:{opts.port}: {exc}', file=sys.stderr)
         executor.shutdown()
@@ -488,12 +526,18 @@ def main(args=None):
     print('    POST /make       {"drink": "whiskey_cola"}')
     print('    POST /ask        {"text": "a whiskey coke please"}'
           + ('' if ask_jev else '  -- off: set JEV_KEY'))
+    print('    POST /arm/move   {"joints": [0.5]}  -- absolute radians, '
+          'rpi4 arm')
+    print('    GET  /arm/state'
+          + ('' if pi_arm_client else '   -- off: pass --pi-arm'))
+    if pi_arm_client is not None:
+        print(f'    pi arm bridge:   {opts.pi_arm}')
     print(f'  points: {points_path}')
     print(f'  menu:   {menu_path or "none (--menu)"}')
     if opts.host not in ('127.0.0.1', 'localhost'):
         print(f'\n  WARNING: bound to {opts.host}. This process moves the '
-              f'robot arms (/move/*, /gripper, /pick, /make).\n           Only do this on '
-              f'a trusted, isolated robot LAN.')
+              f'robot arms (/move/*, /gripper, /pick, /make, /arm/move).'
+              f'\n           Only do this on a trusted, isolated robot LAN.')
     print('\n  Ctrl-C to stop.\n')
 
     try:
