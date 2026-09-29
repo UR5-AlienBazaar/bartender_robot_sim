@@ -48,7 +48,7 @@ If a test count drops after you touch a CMakeLists, check
 `build/<pkg>/CTestTestfile.cmake` for the test you expect before assuming
 your change is fine.
 
-1091 tests, none of which need a robot. They run in about 13 seconds, so
+1140 tests, none of which need a robot. They run in about 13 seconds, so
 there is no excuse for not running them.
 
 The `fingertip/` generator is standalone with its own venv:

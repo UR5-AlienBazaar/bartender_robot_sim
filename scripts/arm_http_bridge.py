@@ -77,25 +77,28 @@ def make_handler(node):
                 else:
                     self._send(200, result)
             else:
-                self._send(404, {'error': 'not found'})
+                self._send(404, {'ok': False, 'error': 'not found'})
 
         def do_POST(self):
             path = self.path.split('?')[0].rstrip('/')
             if path != '/arm/move':
-                self._send(404, {'error': 'not found'})
+                self._send(404, {'ok': False, 'error': 'not found'})
                 return
             try:
                 n = int(self.headers.get('Content-Length') or 0)
                 body = json.loads(self.rfile.read(n) or b'{}')
             except (ValueError, json.JSONDecodeError):
-                self._send(400, {'error': 'bad request body'})
+                self._send(400, {'ok': False, 'error': 'bad request body'})
                 return
             joints = body.get('joints') if isinstance(body, dict) else None
+            # bools are ints in Python: 'joints': [true] must not move the arm.
             if (not isinstance(joints, list) or not 1 <= len(joints) <= MAX_JOINTS
                     or not all(isinstance(j, (int, float))
+                               and not isinstance(j, bool)
                                and j == j and abs(j) != float('inf')
                                for j in joints)):
-                self._send(400, {'error': f'joints must be 1-{MAX_JOINTS} '
+                self._send(400, {'ok': False,
+                                 'error': f'joints must be 1-{MAX_JOINTS} '
                                           'finite numbers (absolute radians)'})
                 return
             msg = Float64MultiArray()

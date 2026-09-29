@@ -21,7 +21,7 @@ autonomy" below before assuming a green run means much — a single run is
 weak evidence here, deliberately.
 - **Teach pendant** — terminal and browser, two arms, tool centre points,
   taught points, and recorded pipelines.
-- **1091 tests**, none of which need a robot.
+- **1140 tests**, none of which need a robot.
 - Two recordings of successful runs in `recordings/`.
 
 ## What is actually blocking autonomy
@@ -322,7 +322,7 @@ is now the top defect and is about where arm B puts the bell.
 ### Phase B — the read-only API — **built**
 
 `GET /world`, `GET /state`, `POST /can` all exist in a new package,
-`bartender_api`, tested against the real running sim (1091/1091 tests
+`bartender_api`, tested against the real running sim (1140/1140 tests
 pass). The error taxonomy is applied to both skills' failures now
 (`Arm.last_error` for `open_bottle`, `PourActionServer.last_error` for
 `pour_drink`), though most of `pour_drink`'s still classify as the generic

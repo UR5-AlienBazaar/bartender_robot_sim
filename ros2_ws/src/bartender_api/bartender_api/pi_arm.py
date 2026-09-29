@@ -35,30 +35,37 @@ class PiArm:
         with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
             return json.load(resp)
 
+    def _request(self, method, path, body=None):
+        """_call plus the error shaping every answer shares.
+
+        A bridge error body (a 400 naming the joints it refused, a 503 'no
+        /joint_states yet') is more useful than the bare status, so it is
+        parsed through -- but normalized, because some of the bridge's own
+        error payloads carry only 'error', and the contract above promises
+        'ok' on every dict this class returns.
+        """
+        try:
+            return self._call(method, path, body)
+        except urllib.error.HTTPError as exc:
+            try:
+                result = json.load(exc)
+            except (ValueError, OSError):
+                result = None
+            if not isinstance(result, dict):
+                return {'ok': False, 'error': f'pi arm bridge: HTTP {exc.code}'}
+            result.setdefault('ok', False)
+            return result
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            return {'ok': False, 'error': f'pi arm bridge unreachable: {exc}'}
+
     def move(self, joints):
         """Command absolute joint positions, in radians.
 
         Returns the bridge's answer, or {'ok': False, 'error': ...} when
         the Pi is unreachable.
         """
-        try:
-            return self._call('POST', '/arm/move', {'joints': list(joints)})
-        except urllib.error.HTTPError as exc:
-            try:
-                return json.load(exc)
-            except (ValueError, OSError):
-                return {'ok': False, 'error': f'pi arm bridge: HTTP {exc.code}'}
-        except (urllib.error.URLError, OSError, ValueError) as exc:
-            return {'ok': False, 'error': f'pi arm bridge unreachable: {exc}'}
+        return self._request('POST', '/arm/move', {'joints': list(joints)})
 
     def state(self):
         """Latest /joint_states from the Pi, or {'ok': False, ...}."""
-        try:
-            return self._call('GET', '/arm/state')
-        except urllib.error.HTTPError as exc:
-            try:
-                return json.load(exc)
-            except (ValueError, OSError):
-                return {'ok': False, 'error': f'pi arm bridge: HTTP {exc.code}'}
-        except (urllib.error.URLError, OSError, ValueError) as exc:
-            return {'ok': False, 'error': f'pi arm bridge unreachable: {exc}'}
+        return self._request('GET', '/arm/state')
